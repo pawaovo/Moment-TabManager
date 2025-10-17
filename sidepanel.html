@@ -29,6 +29,10 @@
                 <span class="tab-icon">🔗</span>
                 链接弹窗
             </button>
+            <button class="tab-button" data-tab="window-manager">
+                <span class="tab-icon">🪟</span>
+                窗口管理
+            </button>
         </nav>
 
         <!-- 主要内容区域 -->
@@ -316,6 +320,35 @@
             <section class="settings-actions">
                 <button id="resetSettings" class="btn btn-secondary">重置设置</button>
             </section>
+            </div>
+
+            <!-- 窗口管理面板 -->
+            <div id="window-manager" class="tab-content">
+                <!-- 窗口管理快速操作 -->
+                <div class="quick-actions">
+                    <h3 class="section-title">窗口管理</h3>
+
+                    <button class="btn-action" id="openWindowManagerBtn">
+                        <span class="btn-icon">🪟</span>
+                        <span class="btn-text">打开窗口管理器</span>
+                        <span class="btn-shortcut">点击打开</span>
+                    </button>
+                </div>
+
+                <!-- 功能说明 -->
+                <div class="settings-section">
+                    <h3 class="section-title">功能说明</h3>
+                    <div class="feature-description">
+                        <p>🪟 <strong>多窗口展示</strong>：在一个页面中同时查看多个网页内容</p>
+                        <p>🎛️ <strong>自定义布局</strong>：支持1-2行，每行1-3个窗口的灵活布局</p>
+                        <p>🔄 <strong>实时同步</strong>：直接操作真实的浏览器标签页内容</p>
+                        <p>⌨️ <strong>快捷操作</strong>：支持键盘快捷键和双击快速添加</p>
+                    </div>
+
+                    <div class="help-tip">
+                        💡 点击上方按钮打开独立的窗口管理器页面，享受完整功能体验
+                    </div>
+                </div>
             </div>
         </main>
 

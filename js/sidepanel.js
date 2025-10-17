@@ -102,6 +102,9 @@ class UnifiedSidepanel {
         // 链接弹窗事件
         this.bindLinkWindowEvents();
 
+        // 窗口管理事件
+        this.bindWindowManagerEvents();
+
         // 快捷键模态框事件
         this.bindShortcutModalEvents();
     }
@@ -372,6 +375,32 @@ class UnifiedSidepanel {
 
         document.body.appendChild(modal);
     }
+    bindWindowManagerEvents() {
+        // 打开窗口管理器按钮
+        document.getElementById('openWindowManagerBtn')?.addEventListener('click', () => {
+            this.openWindowManager();
+        });
+
+        // 注意：布局配置和标签页列表功能已移至独立的窗口管理页面
+        // 这里只保留打开窗口管理器的功能
+    }
+
+    async openWindowManager() {
+        try {
+            // 创建窗口管理页面
+            const tab = await chrome.tabs.create({
+                url: chrome.runtime.getURL('window-manager.html')
+            });
+
+            console.log('🪟 窗口管理页面已打开:', tab.id);
+            this.showStatusMessage('窗口管理页面已打开', 'success');
+        } catch (error) {
+            console.error('❌ 打开窗口管理页面失败:', error);
+            this.showStatusMessage('打开窗口管理页面失败: ' + error.message, 'error');
+        }
+    }
+    // 配置管理功能已移至 window-manager.js，避免代码重复
+    // 标签页管理功能已移至 window-manager.js，避免代码重复
 
 
 
@@ -383,6 +412,8 @@ class UnifiedSidepanel {
             this.updateTabManagerUI();
         } else if (this.currentTab === 'link-preview') {
             this.updateLinkWindowUI();
+        } else if (this.currentTab === 'window-manager') {
+            this.updateWindowManagerUI();
         }
     }
 
@@ -394,6 +425,11 @@ class UnifiedSidepanel {
     updateLinkWindowUI() {
         // 更新链接弹窗相关UI
         this.updateLinkWindowSettings();
+    }
+
+    async updateWindowManagerUI() {
+        // 窗口管理功能已移至独立页面，侧边栏只显示基本信息
+        console.log('✅ 窗口管理面板已显示');
     }
 
     updateLinkWindowSettings() {
@@ -597,22 +633,22 @@ class UnifiedSidepanel {
         // 更新基础设置
         this.setSelectValue('triggerMethod', linkPreview.trigger.method);
         this.updateTriggerMethod(linkPreview.trigger.method);
-        
+
         document.getElementById('customKey').value = linkPreview.trigger.customKey || 'Alt';
-        
+
         const delaySlider = document.getElementById('triggerDelay');
         delaySlider.value = linkPreview.trigger.delay || 300;
         this.updateSliderValue(delaySlider, 'ms');
-        
+
         this.setSelectValue('windowSize', linkPreview.window.size);
         this.setSelectValue('windowPosition', linkPreview.window.position);
-        
+
         document.getElementById('windowColor').value = linkPreview.window.color || '#667eea';
-        
+
         const opacitySlider = document.getElementById('backgroundOpacity');
         opacitySlider.value = linkPreview.window.backgroundOpacity || 0.95;
         this.updateSliderValue(opacitySlider, '%', 100);
-        
+
         this.setSelectValue('windowBackground', linkPreview.window.background);
 
         // 更新文本拖拽设置
@@ -887,7 +923,7 @@ class UnifiedSidepanel {
         statusEl.textContent = message;
         statusEl.className = `status-message ${type}`;
         statusEl.classList.remove('hidden');
-        
+
         setTimeout(() => {
             statusEl.classList.add('hidden');
         }, 3000);

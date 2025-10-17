@@ -63,19 +63,21 @@ body {
 
 .tab-button {
     flex: 1;
-    padding: 15px 20px;
+    padding: 12px 8px;
     border: none;
     background: transparent;
     color: #6c757d;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     border-bottom: 3px solid transparent;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .tab-button:hover {
@@ -847,3 +849,36 @@ body {
 }
 
 /* 🔧 优化：移除重复的 .status-message 定义，使用统一的状态消息样式 */
+
+/* 标签页相关样式已移至 window-manager.css，避免重复 */
+
+/* 功能说明样式 */
+.feature-description {
+    margin-bottom: 16px;
+}
+
+.feature-description p {
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-left: 3px solid #667eea;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.feature-description strong {
+    color: #495057;
+    font-weight: 600;
+}
+
+.help-tip {
+    padding: 12px;
+    background: #e7f3ff;
+    border: 1px solid #b3d9ff;
+    border-radius: 6px;
+    color: #0066cc;
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: center;
+}
