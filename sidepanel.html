@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MomentTabManager 设置</title>
+    <link rel="stylesheet" href="css/sidepanel.css">
+</head>
+<body>
+    <div class="sidepanel-container">
+        <!-- 头部 -->
+        <header class="sidepanel-header">
+            <div class="header-content">
+                <img src="icons/icon48.png" alt="MomentTabManager" class="header-icon">
+                <div class="header-text">
+                    <h1>MomentTabManager</h1>
+                    <p>标签管理与链接弹窗</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- 功能切换标签 -->
+        <nav class="tab-navigation">
+            <button class="tab-button active" data-tab="tab-manager">
+                <span class="tab-icon">📁</span>
+                标签管理
+            </button>
+            <button class="tab-button" data-tab="link-preview">
+                <span class="tab-icon">🔗</span>
+                链接弹窗
+            </button>
+        </nav>
+
+        <!-- 主要内容区域 -->
+        <main class="sidepanel-main">
+            <!-- 标签管理面板 -->
+            <div id="tab-manager" class="tab-content active">
+                <!-- 快速操作按钮 -->
+                <div class="quick-actions">
+                    <h3 class="section-title">快速操作</h3>
+
+                    <button class="btn-action" id="groupTabsBtn">
+                        <span class="btn-icon">📁</span>
+                        <span class="btn-text">分组标签</span>
+                        <span class="btn-shortcut">Ctrl+M</span>
+                    </button>
+
+                    <button class="btn-action" id="dedupeTabsBtn">
+                        <span class="btn-icon">🔄</span>
+                        <span class="btn-text">去重标签</span>
+                        <span class="btn-shortcut">Ctrl+Shift+M</span>
+                    </button>
+
+                    <button class="btn-action" id="copyTabsBtn">
+                        <span class="btn-icon">📋</span>
+                        <span class="btn-text">复制标签</span>
+                        <span class="btn-shortcut">Ctrl+K</span>
+                    </button>
+
+                    <button class="btn-action" id="ungroupTabsBtn">
+                        <span class="btn-icon">📂</span>
+                        <span class="btn-text">取消分组</span>
+                        <span class="btn-shortcut">Ctrl+Shift+K</span>
+                    </button>
+                </div>
+
+
+
+                <!-- 快捷键设置 -->
+                <div class="settings-section">
+                    <h3 class="section-title">快捷键设置</h3>
+
+                    <!-- 分组快捷键 -->
+                    <div class="setting-item">
+                        <label class="setting-label">分组快捷键</label>
+                        <div class="shortcut-input-wrapper" id="groupShortcutWrapper">
+                            <div class="shortcut-display" id="groupShortcutDisplay">
+                                <span class="shortcut-keys" id="groupShortcutText">Ctrl+M</span>
+                                <button class="shortcut-edit-btn" id="groupShortcutEditBtn">修改</button>
+                            </div>
+                            <div class="shortcut-input-container" id="groupShortcutInputContainer" style="display: none;">
+                                <input type="text" class="shortcut-input" id="groupShortcutInput"
+                                       placeholder="按下你想要的快捷键组合..." readonly>
+                                <div class="shortcut-actions">
+                                    <button class="shortcut-save-btn" id="groupShortcutSaveBtn" disabled>保存</button>
+                                    <button class="shortcut-cancel-btn" id="groupShortcutCancelBtn">取消</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 去重快捷键 -->
+                    <div class="setting-item">
+                        <label class="setting-label">去重快捷键</label>
+                        <div class="shortcut-input-wrapper" id="dedupeShortcutWrapper">
+                            <div class="shortcut-display" id="dedupeShortcutDisplay">
+                                <span class="shortcut-keys" id="dedupeShortcutText">Ctrl+Shift+M</span>
+                                <button class="shortcut-edit-btn" id="dedupeShortcutEditBtn">修改</button>
+                            </div>
+                            <div class="shortcut-input-container" id="dedupeShortcutInputContainer" style="display: none;">
+                                <input type="text" class="shortcut-input" id="dedupeShortcutInput"
+                                       placeholder="按下你想要的快捷键组合..." readonly>
+                                <div class="shortcut-actions">
+                                    <button class="shortcut-save-btn" id="dedupeShortcutSaveBtn" disabled>保存</button>
+                                    <button class="shortcut-cancel-btn" id="dedupeShortcutCancelBtn">取消</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 复制快捷键 -->
+                    <div class="setting-item">
+                        <label class="setting-label">复制快捷键</label>
+                        <div class="shortcut-input-wrapper" id="copyShortcutWrapper">
+                            <div class="shortcut-display" id="copyShortcutDisplay">
+                                <span class="shortcut-keys" id="copyShortcutText">Ctrl+K</span>
+                                <button class="shortcut-edit-btn" id="copyShortcutEditBtn">修改</button>
+                            </div>
+                            <div class="shortcut-input-container" id="copyShortcutInputContainer" style="display: none;">
+                                <input type="text" class="shortcut-input" id="copyShortcutInput"
+                                       placeholder="按下你想要的快捷键组合..." readonly>
+                                <div class="shortcut-actions">
+                                    <button class="shortcut-save-btn" id="copyShortcutSaveBtn" disabled>保存</button>
+                                    <button class="shortcut-cancel-btn" id="copyShortcutCancelBtn">取消</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 取消分组快捷键 -->
+                    <div class="setting-item">
+                        <label class="setting-label">取消分组快捷键</label>
+                        <div class="shortcut-input-wrapper" id="ungroupShortcutWrapper">
+                            <div class="shortcut-display" id="ungroupShortcutDisplay">
+                                <span class="shortcut-keys" id="ungroupShortcutText">Ctrl+Shift+K</span>
+                                <button class="shortcut-edit-btn" id="ungroupShortcutEditBtn">修改</button>
+                            </div>
+                            <div class="shortcut-input-container" id="ungroupShortcutInputContainer" style="display: none;">
+                                <input type="text" class="shortcut-input" id="ungroupShortcutInput"
+                                       placeholder="按下你想要的快捷键组合..." readonly>
+                                <div class="shortcut-actions">
+                                    <button class="shortcut-save-btn" id="ungroupShortcutSaveBtn" disabled>保存</button>
+                                    <button class="shortcut-cancel-btn" id="ungroupShortcutCancelBtn">取消</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+            </div>
+
+            <!-- 链接弹窗面板 -->
+            <div id="link-preview" class="tab-content">
+                <!-- 链接弹窗基础设置 -->
+                <section class="settings-section">
+                    <h2>链接弹窗基础设置</h2>
+                
+                <div class="setting-item">
+                    <label for="triggerMethod">触发方式</label>
+                    <select id="triggerMethod" class="setting-select">
+                        <option value="alt+click">自定义快捷键+点击</option>
+                        <option value="alt+hover">自定义快捷键+悬停</option>
+                        <option value="longpress">长按</option>
+                        <option value="drag">拖拽</option>
+                        <option value="hover">悬停</option>
+                    </select>
+                </div>
+
+                <div class="setting-item" id="customKeyContainer">
+                    <label for="customKey">自定义快捷键</label>
+                    <div class="shortcut-input-container">
+                        <input type="text" id="customKey" class="setting-input" readonly>
+                        <button id="customKeyBtn" class="shortcut-btn">修改</button>
+                    </div>
+                </div>
+
+                <div class="setting-item" id="triggerDelayContainer">
+                    <label for="triggerDelay">触发延迟</label>
+                    <div class="slider-container">
+                        <input type="range" id="triggerDelay" class="setting-slider" min="0" max="2000" step="50">
+                        <span class="slider-value">300ms</span>
+                    </div>
+                    <div class="delay-description">调节触发延迟时间</div>
+                </div>
+
+                <div class="setting-item">
+                    <label for="windowSize">弹窗大小</label>
+                    <select id="windowSize" class="setting-select">
+                        <option value="small">小</option>
+                        <option value="medium">中</option>
+                        <option value="large">大</option>
+                        <option value="lastSize">上次大小</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="windowPosition">弹窗位置</label>
+                    <select id="windowPosition" class="setting-select">
+                        <option value="left">左侧</option>
+                        <option value="center">中间</option>
+                        <option value="right">右侧</option>
+                        <option value="mouse">跟随鼠标</option>
+                        <option value="lastPosition">上次位置</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="windowColor">弹窗颜色</label>
+                    <div class="color-picker-container">
+                        <input type="color" id="windowColor" class="color-picker">
+                        <div class="color-presets">
+                            <div class="color-preset" data-color="#667eea" style="background: #667eea;"></div>
+                            <div class="color-preset" data-color="#f093fb" style="background: #f093fb;"></div>
+                            <div class="color-preset" data-color="#4facfe" style="background: #4facfe;"></div>
+                            <div class="color-preset" data-color="#43e97b" style="background: #43e97b;"></div>
+                            <div class="color-preset" data-color="#fa709a" style="background: #fa709a;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                    <label for="backgroundOpacity">背景透明度</label>
+                    <div class="slider-container">
+                        <input type="range" id="backgroundOpacity" class="setting-slider" min="0.1" max="1.0" step="0.01">
+                        <span class="slider-value">95%</span>
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                    <label for="windowBackground">弹窗背景</label>
+                    <select id="windowBackground" class="setting-select">
+                        <option value="default">默认</option>
+                        <option value="transparent">透明</option>
+                        <option value="blur">模糊</option>
+                    </select>
+                </div>
+            </section>
+
+            <!-- 文字拖拽功能设置 -->
+            <section class="settings-section">
+                <h2>文字拖拽功能设置</h2>
+                
+                <div class="setting-item">
+                    <label for="textDragEnabled">文本拖拽总开关</label>
+                    <select id="textDragEnabled" class="setting-select">
+                        <option value="true">启用</option>
+                        <option value="false">禁用</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="dragUp">向上拖拽</label>
+                    <select id="dragUp" class="setting-select">
+                        <option value="search">搜索</option>
+                        <option value="translate">翻译</option>
+                        <option value="none">无</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="dragDown">向下拖拽</label>
+                    <select id="dragDown" class="setting-select">
+                        <option value="search">搜索</option>
+                        <option value="translate">翻译</option>
+                        <option value="none">无</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="dragLeft">向左拖拽</label>
+                    <select id="dragLeft" class="setting-select">
+                        <option value="search">搜索</option>
+                        <option value="translate">翻译</option>
+                        <option value="none">无</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="dragRight">向右拖拽</label>
+                    <select id="dragRight" class="setting-select">
+                        <option value="search">搜索</option>
+                        <option value="translate">翻译</option>
+                        <option value="none">无</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="searchEngine">搜索引擎</label>
+                    <select id="searchEngine" class="setting-select">
+                        <option value="baidu">百度</option>
+                        <option value="google">谷歌</option>
+                        <option value="bing">Bing</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="translateEngine">翻译引擎</label>
+                    <select id="translateEngine" class="setting-select">
+                        <option value="baidu">百度翻译</option>
+                        <option value="google">谷歌翻译</option>
+                        <option value="bing">Bing翻译</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="targetLanguage">目标语言</label>
+                    <select id="targetLanguage" class="setting-select">
+                        <option value="zh">中文</option>
+                        <option value="en">英文</option>
+                    </select>
+                </div>
+            </section>
+
+            <!-- 操作按钮 -->
+            <section class="settings-actions">
+                <button id="resetSettings" class="btn btn-secondary">重置设置</button>
+            </section>
+            </div>
+        </main>
+
+        <!-- 状态提示 -->
+        <div id="statusMessage" class="status-message hidden"></div>
+    </div>
+
+    <!-- 快捷键设置模态框 -->
+    <div id="shortcutModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>设置自定义快捷键</h3>
+            <p>请按下您想要设置的快捷键组合</p>
+            <div class="shortcut-display" id="shortcutDisplay">等待输入...</div>
+            <div class="modal-actions">
+                <button id="shortcutCancel" class="btn btn-secondary">取消</button>
+                <button id="shortcutConfirm" class="btn btn-primary" disabled>确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔧 修复：添加 utils.js 依赖，解决 StorageUtils is not defined 错误 -->
+    <script src="js/utils.js"></script>
+    <script src="js/sidepanel.js"></script>
+</body>
+</html>
