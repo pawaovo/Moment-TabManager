@@ -38,6 +38,9 @@ class WindowManager {
         // 当前选中的窗口
         this.selectedWindow = null;
 
+        // 🔧 新增：当前聚焦的窗口（用于刷新操作）
+        this.focusedWindow = null;
+
         // 窗口ID计数器
         this.windowIdCounter = 1;
 
@@ -970,6 +973,9 @@ class WindowManager {
             content.innerHTML = '';
             content.appendChild(iframe);
 
+            // 🔧 新增：为iframe添加焦点管理
+            this.setupIframeFocusManagement(iframe);
+
         } catch (error) {
             console.error('❌ 创建iframe失败:', error);
             this.showIframeError(content, error.message);
@@ -1309,15 +1315,16 @@ class WindowManager {
      * 处理键盘快捷键
      */
     handleKeyboardShortcuts(e) {
-        // 🔧 修复：检查事件是否来自iframe，如果是则不拦截
-        if (this.isEventFromIframe(e)) {
-            return; // 让iframe自己处理事件
-        }
-
-        // F5: 刷新标签页列表
+        // F5: 智能刷新处理
         if (e.key === 'F5') {
             e.preventDefault();
-            this.loadAvailableTabs();
+
+            // 🔧 新增：如果有聚焦的窗口，则刷新该窗口；否则刷新标签页列表
+            if (this.focusedWindow) {
+                this.refreshFocusedWindow();
+            } else {
+                this.loadAvailableTabs();
+            }
             return;
         }
 
@@ -1401,6 +1408,90 @@ class WindowManager {
         } catch (error) {
             console.log('⚠️ 设置iframe事件隔离失败:', error.message);
         }
+    }
+
+    /**
+     * 🔧 新增：为iframe设置焦点管理
+     */
+    setupIframeFocusManagement(iframe) {
+        // 获取iframe所属的窗口
+        const windowElement = iframe.closest('.window-item');
+        if (!windowElement) return;
+
+        const windowId = windowElement.dataset.windowId;
+
+        // 监听iframe焦点事件
+        iframe.addEventListener('focus', () => {
+            this.setFocusedWindow(windowId);
+        });
+
+        // 监听iframe点击事件（也表示获得焦点）
+        iframe.addEventListener('click', () => {
+            this.setFocusedWindow(windowId);
+        });
+
+        // 监听窗口容器点击事件
+        windowElement.addEventListener('click', () => {
+            this.setFocusedWindow(windowId);
+        });
+
+        console.log(`🎯 已为窗口 ${windowId} 设置焦点管理`);
+    }
+
+    /**
+     * 🔧 新增：设置当前聚焦的窗口
+     */
+    setFocusedWindow(windowId) {
+        // 移除之前窗口的聚焦状态
+        if (this.focusedWindow) {
+            const prevWindow = document.querySelector(`[data-window-id="${this.focusedWindow}"]`);
+            if (prevWindow) {
+                prevWindow.classList.remove('focused');
+            }
+        }
+
+        // 设置新的聚焦窗口
+        this.focusedWindow = windowId;
+        const currentWindow = document.querySelector(`[data-window-id="${windowId}"]`);
+        if (currentWindow) {
+            currentWindow.classList.add('focused');
+        }
+
+        console.log(`🎯 窗口焦点已切换到: ${windowId}`);
+    }
+
+    /**
+     * 🔧 新增：刷新当前聚焦的窗口
+     */
+    refreshFocusedWindow() {
+        if (!this.focusedWindow) {
+            console.log('⚠️ 没有聚焦的窗口，无法刷新');
+            return;
+        }
+
+        const windowElement = document.querySelector(`[data-window-id="${this.focusedWindow}"]`);
+        if (!windowElement) {
+            console.log('⚠️ 找不到聚焦的窗口元素');
+            this.focusedWindow = null;
+            return;
+        }
+
+        const iframe = windowElement.querySelector('iframe');
+        if (!iframe) {
+            console.log('⚠️ 聚焦窗口中没有iframe');
+            return;
+        }
+
+        // 刷新iframe
+        const currentSrc = iframe.src;
+        iframe.src = 'about:blank';
+
+        // 短暂延迟后重新加载
+        setTimeout(() => {
+            iframe.src = currentSrc;
+            console.log(`🔄 已刷新窗口: ${this.focusedWindow}`);
+            this.showStatusMessage(`已刷新窗口: ${this.focusedWindow}`, 'success');
+        }, 100);
     }
 }
 

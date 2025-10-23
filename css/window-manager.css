@@ -444,6 +444,13 @@ body {
     z-index: 100;
 }
 
+/* 🔧 新增：聚焦窗口样式 */
+.window-item.focused {
+    border-color: #0969da;
+    box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3), 0 4px 16px rgba(9, 105, 218, 0.2);
+    z-index: 1000;
+}
+
 /* 拖拽状态 */
 .window-item.dragging {
     opacity: 0.8;
