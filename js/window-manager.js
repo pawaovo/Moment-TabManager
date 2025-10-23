@@ -253,31 +253,9 @@ class WindowManager {
     bindEvents() {
         // 侧边栏控制事件
         this.bindSidebarEvents();
-        // 布局配置事件
-        document.getElementById('layoutRows')?.addEventListener('change', (e) => {
-            this.updateLayoutConfig('rows', parseInt(e.target.value));
-        });
 
-        document.getElementById('firstRowCount')?.addEventListener('change', (e) => {
-            this.updateLayoutConfig('firstRowCount', parseInt(e.target.value));
-        });
-
-        document.getElementById('secondRowCount')?.addEventListener('change', (e) => {
-            this.updateLayoutConfig('secondRowCount', parseInt(e.target.value));
-        });
-
-        document.getElementById('thirdRowCount')?.addEventListener('change', (e) => {
-            this.updateLayoutConfig('thirdRowCount', parseInt(e.target.value));
-        });
-
-        document.getElementById('fourthRowCount')?.addEventListener('change', (e) => {
-            this.updateLayoutConfig('fourthRowCount', parseInt(e.target.value));
-        });
-
-        // 应用布局按钮
-        document.getElementById('applyLayoutBtn')?.addEventListener('click', () => {
-            this.updateLayout();
-        });
+        // 画布相关事件
+        this.setupCanvas();
 
         // 刷新标签页列表
         document.getElementById('refreshTabsBtn')?.addEventListener('click', () => {
@@ -432,45 +410,200 @@ class WindowManager {
     }
 
     /**
-     * 更新行数控制UI
+     * 设置画布
      */
-    updateRowControls() {
-        const rows = this.config.rows;
-        const secondRowContainer = document.getElementById('secondRowContainer');
-        const thirdRowContainer = document.getElementById('thirdRowContainer');
-        const fourthRowContainer = document.getElementById('fourthRowContainer');
+    setupCanvas() {
+        this.initializeCanvasDimensions();
+        this.setupDropZone();
+        this.renderCanvas();
 
-        // 显示/隐藏行数控制
-        if (secondRowContainer) {
-            secondRowContainer.style.display = rows >= 2 ? 'block' : 'none';
-        }
-        if (thirdRowContainer) {
-            thirdRowContainer.style.display = rows >= 3 ? 'block' : 'none';
-        }
-        if (fourthRowContainer) {
-            fourthRowContainer.style.display = rows >= 4 ? 'block' : 'none';
-        }
+        // 监听窗口大小变化
+        window.addEventListener('resize', () => {
+            this.initializeCanvasDimensions();
+        });
 
-        // 更新选择器值
-        const layoutRows = document.getElementById('layoutRows');
-        const firstRowCount = document.getElementById('firstRowCount');
-        const secondRowCount = document.getElementById('secondRowCount');
-        const thirdRowCount = document.getElementById('thirdRowCount');
-        const fourthRowCount = document.getElementById('fourthRowCount');
+        WindowManager.log('画布初始化完成');
+    }
 
-        if (layoutRows) layoutRows.value = this.config.rows.toString();
-        if (firstRowCount) firstRowCount.value = this.config.firstRowCount.toString();
-        if (secondRowCount) secondRowCount.value = this.config.secondRowCount.toString();
-        if (thirdRowCount) thirdRowCount.value = this.config.thirdRowCount.toString();
-        if (fourthRowCount) fourthRowCount.value = this.config.fourthRowCount.toString();
+    /**
+     * 初始化画布尺寸
+     */
+    initializeCanvasDimensions() {
+        const canvasContainer = document.getElementById('canvasContainer');
+        if (!canvasContainer) return;
+
+        const rect = canvasContainer.getBoundingClientRect();
+        this.canvasConfig.cellWidth = rect.width / this.canvasConfig.gridCols;
+        this.canvasConfig.cellHeight = rect.height / this.canvasConfig.gridRows;
+
+        WindowManager.log(`画布尺寸: ${rect.width}×${rect.height}, 单元格: ${this.canvasConfig.cellWidth}×${this.canvasConfig.cellHeight}`);
+    }
+
+    /**
+     * 设置拖拽放置区域
+     */
+    setupDropZone() {
+        const canvasContainer = document.getElementById('canvasContainer');
+        if (!canvasContainer) return;
+
+        // 设置拖拽放置事件
+        canvasContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            this.showGridOverlay();
+        });
+
+        canvasContainer.addEventListener('dragleave', (e) => {
+            // 只有当离开整个容器时才隐藏网格
+            if (!canvasContainer.contains(e.relatedTarget)) {
+                this.hideGridOverlay();
+            }
+        });
+
+        canvasContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.hideGridOverlay();
+            this.handleCanvasDrop(e);
+        });
     }
 
     /**
      * 更新UI
      */
     updateUI() {
-        this.updateRowControls();
-        this.updateLayout();
+        this.renderCanvas();
+    }
+
+    /**
+     * 处理画布拖拽放置
+     */
+    handleCanvasDrop(event) {
+        try {
+            const dragData = JSON.parse(event.dataTransfer.getData('text/plain'));
+            const rect = document.getElementById('canvasContainer').getBoundingClientRect();
+
+            // 计算拖拽位置对应的网格坐标
+            const pixelX = event.clientX - rect.left;
+            const pixelY = event.clientY - rect.top;
+            const gridPos = this.pixelToGrid(pixelX, pixelY);
+
+            if (dragData.type === 'tab') {
+                this.createWindowFromTab(dragData.tab, gridPos.x, gridPos.y);
+            } else if (dragData.type === 'tabGroup') {
+                this.createWindowFromTabGroup(dragData.tabs, gridPos.x, gridPos.y);
+            }
+
+        } catch (error) {
+            console.error('❌ 处理拖拽放置失败:', error);
+            this.showStatusMessage('创建窗口失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 像素坐标转网格坐标
+     */
+    pixelToGrid(pixelX, pixelY) {
+        return {
+            x: Math.floor(pixelX / this.canvasConfig.cellWidth),
+            y: Math.floor(pixelY / this.canvasConfig.cellHeight)
+        };
+    }
+
+    /**
+     * 网格坐标转像素坐标
+     */
+    gridToPixel(gridX, gridY) {
+        return {
+            x: gridX * this.canvasConfig.cellWidth,
+            y: gridY * this.canvasConfig.cellHeight
+        };
+    }
+
+    /**
+     * 显示网格辅助
+     */
+    showGridOverlay() {
+        const gridOverlay = document.getElementById('gridOverlay');
+        if (gridOverlay) {
+            gridOverlay.classList.add('visible');
+        }
+    }
+
+    /**
+     * 隐藏网格辅助
+     */
+    hideGridOverlay() {
+        const gridOverlay = document.getElementById('gridOverlay');
+        if (gridOverlay) {
+            gridOverlay.classList.remove('visible');
+        }
+    }
+
+    /**
+     * 从单个标签页创建窗口
+     */
+    createWindowFromTab(tab, x, y) {
+        const windowSize = this.calculateWindowSize([tab]);
+        const window = this.createWindow(x, y, windowSize.width, windowSize.height, [tab]);
+        this.renderWindow(window);
+        this.saveConfig();
+
+        WindowManager.log(`从标签页创建窗口: ${tab.title}`);
+        this.showStatusMessage(`已创建窗口: ${tab.title}`, 'success');
+    }
+
+    /**
+     * 从标签页分组创建窗口
+     */
+    createWindowFromTabGroup(tabs, x, y) {
+        const windowSize = this.calculateWindowSize(tabs);
+        const window = this.createWindow(x, y, windowSize.width, windowSize.height, tabs);
+        this.renderWindow(window);
+        this.saveConfig();
+
+        WindowManager.log(`从分组创建窗口: ${tabs.length}个标签页`);
+        this.showStatusMessage(`已创建窗口: ${tabs.length}个标签页`, 'success');
+    }
+
+    /**
+     * 计算窗口尺寸
+     */
+    calculateWindowSize(tabs) {
+        const tabCount = tabs.length;
+
+        if (tabCount === 1) {
+            return { width: 2, height: 2 }; // 2×2单元格
+        } else if (tabCount <= 3) {
+            return { width: 2, height: 2 }; // 2×2单元格
+        } else if (tabCount <= 6) {
+            return { width: 3, height: 2 }; // 3×2单元格
+        } else {
+            return { width: 3, height: 3 }; // 3×3单元格
+        }
+    }
+
+    /**
+     * 渲染画布
+     */
+    renderCanvas() {
+        const windowsLayer = document.getElementById('windowsLayer');
+        const emptyState = document.getElementById('emptyState');
+
+        if (!windowsLayer || !emptyState) return;
+
+        // 清空现有窗口
+        windowsLayer.innerHTML = '';
+
+        if (this.windows.length === 0) {
+            emptyState.style.display = 'block';
+        } else {
+            emptyState.style.display = 'none';
+
+            // 渲染所有窗口
+            this.windows.forEach(window => {
+                this.renderWindow(window);
+            });
+        }
     }
 
     /**
@@ -492,83 +625,145 @@ class WindowManager {
     }
 
     /**
-     * 更新窗口布局
+     * 渲染单个窗口
      */
-    updateLayout() {
-        const container = document.getElementById('windowsContainer');
-        if (!container) return;
+    renderWindow(window) {
+        const windowsLayer = document.getElementById('windowsLayer');
+        if (!windowsLayer) return;
 
-        // 清空现有内容
-        container.innerHTML = '';
+        const windowElement = this.createWindowElement(window);
+        windowsLayer.appendChild(windowElement);
 
-        // 计算总窗口数
-        let totalWindows = this.config.firstRowCount;
-        if (this.config.rows >= 2) totalWindows += this.config.secondRowCount;
-        if (this.config.rows >= 3) totalWindows += this.config.thirdRowCount;
-        if (this.config.rows >= 4) totalWindows += this.config.fourthRowCount;
+        // 设置窗口位置和尺寸
+        this.positionWindow(windowElement, window);
 
-        // 创建网格容器
-        const grid = document.createElement('div');
-        grid.className = 'windows-grid';
-
-        // 设置网格布局
-        this.applyGridLayout(grid);
-
-        // 创建窗口并设置网格位置
-        let windowIndex = 0;
-        const rowCounts = [this.config.firstRowCount];
-        if (this.config.rows >= 2) rowCounts.push(this.config.secondRowCount);
-        if (this.config.rows >= 3) rowCounts.push(this.config.thirdRowCount);
-        if (this.config.rows >= 4) rowCounts.push(this.config.fourthRowCount);
-
-        for (let row = 0; row < this.config.rows; row++) {
-            for (let col = 0; col < rowCounts[row]; col++) {
-                const window = this.createWindow(windowIndex, row + 1, col + 1);
-                grid.appendChild(window);
-                windowIndex++;
-            }
-        }
-
-        container.appendChild(grid);
-        console.log(`🔄 布局已更新: ${this.config.rows}行布局, 总窗口数: ${totalWindows}`);
+        // 设置拖拽和调整功能
+        this.setupWindowInteraction(windowElement, window);
     }
 
     /**
-     * 应用网格布局
+     * 设置窗口位置
      */
-    applyGridLayout(grid) {
-        const { rows, firstRowCount, secondRowCount, thirdRowCount, fourthRowCount } = this.config;
+    positionWindow(element, window) {
+        const pixel = this.gridToPixel(window.x, window.y);
+        const width = window.width * this.canvasConfig.cellWidth;
+        const height = window.height * this.canvasConfig.cellHeight;
 
-        // 计算最大列数
-        const maxColumns = Math.max(
-            firstRowCount,
-            rows >= 2 ? secondRowCount : 0,
-            rows >= 3 ? thirdRowCount : 0,
-            rows >= 4 ? fourthRowCount : 0
-        );
-
-        // 设置网格行和列
-        grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
-        grid.style.gridTemplateColumns = `repeat(${maxColumns}, 1fr)`;
-
-        console.log(`🎯 应用网格布局: ${rows}行 × ${maxColumns}列`);
+        element.style.left = `${pixel.x}px`;
+        element.style.top = `${pixel.y}px`;
+        element.style.width = `${width}px`;
+        element.style.height = `${height}px`;
     }
 
+    /**
+     * 设置窗口交互功能
+     */
+    setupWindowInteraction(element, window) {
+        // 使用interact.js设置拖拽
+        interact(element)
+            .draggable({
+                listeners: {
+                    start: (event) => {
+                        event.target.classList.add('dragging');
+                        this.showGridOverlay();
+                    },
+                    move: (event) => {
+                        const target = event.target;
+                        const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+                        const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
 
+                        target.style.transform = `translate(${x}px, ${y}px)`;
+                        target.setAttribute('data-x', x);
+                        target.setAttribute('data-y', y);
+                    },
+                    end: (event) => {
+                        event.target.classList.remove('dragging');
+                        this.hideGridOverlay();
+                        this.snapWindowToGrid(event.target, window);
+                    }
+                }
+            })
+            .resizable({
+                edges: { left: true, right: true, bottom: true, top: true },
+                listeners: {
+                    start: (event) => {
+                        this.showGridOverlay();
+                    },
+                    move: (event) => {
+                        const target = event.target;
+                        let x = (parseFloat(target.getAttribute('data-x')) || 0);
+                        let y = (parseFloat(target.getAttribute('data-y')) || 0);
+
+                        target.style.width = event.rect.width + 'px';
+                        target.style.height = event.rect.height + 'px';
+
+                        x += event.deltaRect.left;
+                        y += event.deltaRect.top;
+
+                        target.style.transform = `translate(${x}px, ${y}px)`;
+                        target.setAttribute('data-x', x);
+                        target.setAttribute('data-y', y);
+                    },
+                    end: (event) => {
+                        this.hideGridOverlay();
+                        this.snapWindowToGrid(event.target, window);
+                    }
+                }
+            });
+    }
 
     /**
-     * 创建单个窗口
+     * 将窗口吸附到网格
      */
-    createWindow(index, gridRow = null, gridColumn = null) {
-        const window = document.createElement('div');
-        window.className = 'window-item';
-        window.dataset.windowIndex = index;
+    snapWindowToGrid(element, window) {
+        const rect = element.getBoundingClientRect();
+        const canvasRect = document.getElementById('canvasContainer').getBoundingClientRect();
 
-        // 设置网格位置（如果提供）
-        if (gridRow !== null && gridColumn !== null) {
-            window.style.gridRow = gridRow;
-            window.style.gridColumn = gridColumn;
-        }
+        // 计算相对于画布的位置
+        const relativeX = rect.left - canvasRect.left;
+        const relativeY = rect.top - canvasRect.top;
+
+        // 转换为网格坐标
+        const gridPos = this.pixelToGrid(relativeX, relativeY);
+        const gridWidth = Math.round(rect.width / this.canvasConfig.cellWidth);
+        const gridHeight = Math.round(rect.height / this.canvasConfig.cellHeight);
+
+        // 确保在边界内
+        const clampedX = Math.max(0, Math.min(gridPos.x, this.canvasConfig.gridCols - gridWidth));
+        const clampedY = Math.max(0, Math.min(gridPos.y, this.canvasConfig.gridRows - gridHeight));
+        const clampedWidth = Math.max(1, Math.min(gridWidth, this.canvasConfig.gridCols - clampedX));
+        const clampedHeight = Math.max(1, Math.min(gridHeight, this.canvasConfig.gridRows - clampedY));
+
+        // 检查碰撞并找到最近的有效位置
+        const validPos = this.findNearestValidPosition(clampedX, clampedY, clampedWidth, clampedHeight, window.id);
+
+        // 更新窗口数据
+        this.updateWindow(window.id, {
+            x: validPos.x,
+            y: validPos.y,
+            width: clampedWidth,
+            height: clampedHeight
+        });
+
+        // 重新定位窗口元素
+        this.positionWindow(element, { ...window, x: validPos.x, y: validPos.y, width: clampedWidth, height: clampedHeight });
+
+        // 清除transform
+        element.style.transform = '';
+        element.removeAttribute('data-x');
+        element.removeAttribute('data-y');
+
+        // 保存配置
+        this.saveConfig();
+    }
+
+    /**
+     * 创建窗口元素
+     */
+    createWindowElement(window) {
+        const windowElement = document.createElement('div');
+        windowElement.className = 'window-item';
+        windowElement.dataset.windowId = window.id;
 
         // 窗口头部
         const header = document.createElement('div');
@@ -576,7 +771,9 @@ class WindowManager {
 
         const title = document.createElement('div');
         title.className = 'window-title';
-        title.textContent = `窗口 ${index + 1}`;
+        title.textContent = window.tabs.length > 0 ?
+            `${window.tabs[0].title} ${window.tabs.length > 1 ? `(+${window.tabs.length - 1})` : ''}` :
+            `窗口 ${window.id}`;
 
         const controls = document.createElement('div');
         controls.className = 'window-controls';
@@ -584,7 +781,11 @@ class WindowManager {
         const closeBtn = document.createElement('button');
         closeBtn.className = 'window-control-btn close';
         closeBtn.innerHTML = '×';
-        closeBtn.addEventListener('click', () => this.clearWindow(index));
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.deleteWindow(window.id);
+            this.renderCanvas();
+        });
 
         controls.appendChild(closeBtn);
         header.appendChild(title);
@@ -594,23 +795,56 @@ class WindowManager {
         const content = document.createElement('div');
         content.className = 'window-content';
 
-        // 空状态
-        const emptyState = document.createElement('div');
-        emptyState.className = 'window-empty';
-        emptyState.innerHTML = `
-            <div class="window-empty-icon">📄</div>
-            <p class="window-empty-text">点击右侧标签页添加内容</p>
-        `;
+        if (window.tabs.length === 0) {
+            // 空状态
+            const emptyState = document.createElement('div');
+            emptyState.className = 'window-empty';
+            emptyState.innerHTML = `
+                <div class="window-empty-icon">📄</div>
+                <p class="window-empty-text">拖拽标签页到此处</p>
+            `;
+            content.appendChild(emptyState);
+        } else {
+            // 显示标签页
+            const tabsList = document.createElement('div');
+            tabsList.className = 'window-tabs-list';
 
-        content.appendChild(emptyState);
+            window.tabs.slice(0, 6).forEach(tab => { // 最多显示6个标签页
+                const tabItem = document.createElement('div');
+                tabItem.className = 'window-tab-item';
+                tabItem.innerHTML = `
+                    <img src="${tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="%23999" d="M8 0C3.6 0 0 3.6 0 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8z"/></svg>'}"
+                         alt="" class="tab-favicon">
+                    <span class="tab-title">${tab.title}</span>
+                `;
+                tabsList.appendChild(tabItem);
+            });
+
+            if (window.tabs.length > 6) {
+                const moreItem = document.createElement('div');
+                moreItem.className = 'window-tab-more';
+                moreItem.textContent = `+${window.tabs.length - 6} 更多`;
+                tabsList.appendChild(moreItem);
+            }
+
+            content.appendChild(tabsList);
+        }
+
+        // 添加调整手柄
+        const resizeHandles = ['nw', 'ne', 'sw', 'se', 'n', 's', 'w', 'e'];
+        resizeHandles.forEach(direction => {
+            const handle = document.createElement('div');
+            handle.className = `resize-handle ${direction}`;
+            windowElement.appendChild(handle);
+        });
 
         // 窗口点击事件
-        window.addEventListener('click', () => this.selectWindow(index));
+        windowElement.addEventListener('click', () => this.selectWindow(window.id));
 
-        window.appendChild(header);
-        window.appendChild(content);
+        windowElement.appendChild(header);
+        windowElement.appendChild(content);
 
-        return window;
+        return windowElement;
     }
 
     /**
@@ -699,10 +933,11 @@ class WindowManager {
      */
     clearAllWindows() {
         if (confirm('确定要清空所有窗口吗？')) {
-            this.windows.clear();
+            this.windows = [];
             this.selectedWindow = null;
-            this.updateLayout();
+            this.renderCanvas();
             this.updateButtonStates();
+            this.saveConfig();
 
             console.log('🗑️ 已清空所有窗口');
             this.showStatusMessage('所有窗口已清空', 'success');
@@ -832,7 +1067,7 @@ class WindowManager {
         const domain = this.getDomainFromUrl(url);
 
         return `
-            <div class="tab-item" data-tab-id="${tab.id}" title="${title}">
+            <div class="tab-item draggable" data-tab-id="${tab.id}" title="${title}" draggable="true">
                 <img class="tab-favicon" src="${favicon}" alt="" onerror="this.style.display='none'">
                 <div class="tab-info">
                     <div class="tab-title">${title}</div>
@@ -867,6 +1102,47 @@ class WindowManager {
             item.addEventListener('dblclick', () => {
                 const tabId = parseInt(item.dataset.tabId);
                 this.autoAddTabToWindow(tabId);
+            });
+
+            // 拖拽开始事件
+            item.addEventListener('dragstart', (e) => {
+                const tabId = parseInt(item.dataset.tabId);
+                const tab = this.availableTabs.find(t => t.id === tabId);
+                if (tab) {
+                    const dragData = {
+                        type: 'tab',
+                        tab: tab
+                    };
+                    e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
+                    e.dataTransfer.effectAllowed = 'copy';
+                    item.classList.add('dragging');
+                }
+            });
+
+            // 拖拽结束事件
+            item.addEventListener('dragend', (e) => {
+                item.classList.remove('dragging');
+            });
+        });
+
+        // 绑定标签页分组拖拽事件
+        document.querySelectorAll('.tab-group').forEach(group => {
+            group.addEventListener('dragstart', (e) => {
+                const groupId = parseInt(group.dataset.groupId);
+                const tabs = this.availableTabs.filter(tab => tab.groupId === groupId);
+                if (tabs.length > 0) {
+                    const dragData = {
+                        type: 'tabGroup',
+                        tabs: tabs
+                    };
+                    e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
+                    e.dataTransfer.effectAllowed = 'copy';
+                    group.classList.add('dragging');
+                }
+            });
+
+            group.addEventListener('dragend', (e) => {
+                group.classList.remove('dragging');
             });
         });
     }
