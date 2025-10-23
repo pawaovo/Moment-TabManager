@@ -298,15 +298,7 @@ class WindowManager {
             this.clearAllWindows();
         });
 
-        // 添加到窗口
-        document.getElementById('addToWindowBtn')?.addEventListener('click', () => {
-            this.addTabToWindow();
-        });
 
-        // 清空窗口
-        document.getElementById('clearWindowBtn')?.addEventListener('click', () => {
-            this.clearSelectedWindow();
-        });
 
         // 键盘快捷键
         document.addEventListener('keydown', (e) => {
@@ -586,8 +578,8 @@ class WindowManager {
      * 从单个标签页创建窗口
      */
     createWindowFromTab(tab, x, y) {
-        const windowSize = this.calculateWindowSize([tab]);
-        const window = this.createWindow(x, y, windowSize.width, windowSize.height, [tab]);
+        // 单个标签页固定使用2×4尺寸
+        const window = this.createWindow(x, y, 2, 4, [tab]);
         this.renderWindow(window);
         this.saveConfig();
 
@@ -644,22 +636,7 @@ class WindowManager {
         }
     }
 
-    /**
-     * 计算窗口尺寸（兼容旧方法）
-     */
-    calculateWindowSize(tabs) {
-        const tabCount = tabs.length;
 
-        if (tabCount === 1) {
-            return { width: 2, height: 2 }; // 单个标签页：2×2单元格
-        } else if (tabCount <= 3) {
-            return { width: 2, height: 4 }; // ≤3个：2×4单元格
-        } else if (tabCount <= 6) {
-            return { width: 3, height: 2 }; // 3×2单元格
-        } else {
-            return { width: 3, height: 3 }; // 3×3单元格
-        }
-    }
 
     /**
      * 计算分组布局（为多个窗口计算位置）
@@ -936,8 +913,10 @@ class WindowManager {
             windowElement.appendChild(handle);
         });
 
-        // 窗口点击事件
-        windowElement.addEventListener('click', () => this.selectWindow(window.id));
+        // 窗口点击事件（用于调试）
+        windowElement.addEventListener('click', () => {
+            WindowManager.log(`窗口被点击: ${window.id}`);
+        });
 
         windowElement.appendChild(header);
         windowElement.appendChild(content);
@@ -1072,86 +1051,7 @@ class WindowManager {
         `;
     }
 
-    /**
-     * 选择窗口
-     */
-    selectWindow(index) {
-        // 移除之前的选中状态
-        document.querySelectorAll('.window-item.active').forEach(item => {
-            item.classList.remove('active');
-        });
 
-        // 添加新的选中状态
-        const window = document.querySelector(`[data-window-index="${index}"]`);
-        if (window) {
-            window.classList.add('active');
-            this.selectedWindow = index;
-
-            // 更新按钮状态
-            this.updateButtonStates();
-
-            console.log(`🎯 已选择窗口: ${index}`);
-        }
-    }
-
-    /**
-     * 更新按钮状态
-     */
-    updateButtonStates() {
-        const addBtn = document.getElementById('addToWindowBtn');
-        const clearBtn = document.getElementById('clearWindowBtn');
-
-        const hasSelectedTab = this.selectedTab !== null;
-        const hasSelectedWindow = this.selectedWindow !== null;
-
-        if (addBtn) {
-            addBtn.disabled = !hasSelectedTab || !hasSelectedWindow;
-        }
-
-        if (clearBtn) {
-            clearBtn.disabled = !hasSelectedWindow || !this.windows.has(this.selectedWindow);
-        }
-    }
-
-    /**
-     * 清空指定窗口
-     */
-    clearWindow(index) {
-        const window = document.querySelector(`[data-window-index="${index}"]`);
-        if (!window) return;
-
-        const content = window.querySelector('.window-content');
-        if (!content) return;
-
-        // 移除iframe
-        const iframe = content.querySelector('.window-iframe');
-        if (iframe) {
-            iframe.remove();
-        }
-
-        // 显示空状态
-        content.innerHTML = `
-            <div class="window-empty">
-                <div class="window-empty-icon">📄</div>
-                <p class="window-empty-text">点击右侧标签页添加内容</p>
-            </div>
-        `;
-
-        // 更新窗口标题
-        const title = window.querySelector('.window-title');
-        if (title) {
-            title.textContent = `窗口 ${index + 1}`;
-        }
-
-        // 移除映射关系
-        this.windows.delete(index);
-
-        // 更新按钮状态
-        this.updateButtonStates();
-
-        console.log(`🗑️ 已清空窗口: ${index}`);
-        this.showStatusMessage(`窗口 ${index + 1} 已清空`, 'success');
-    }
 
     /**
      * 清空所有窗口
@@ -1169,14 +1069,7 @@ class WindowManager {
         }
     }
 
-    /**
-     * 清空选中的窗口
-     */
-    clearSelectedWindow() {
-        if (this.selectedWindow !== null) {
-            this.clearWindow(this.selectedWindow);
-        }
-    }
+
 
     /**
      * 加载可用标签页
@@ -1339,11 +1232,7 @@ class WindowManager {
                 this.selectTab(tabId, item);
             });
 
-            // 双击直接添加到空窗口
-            item.addEventListener('dblclick', () => {
-                const tabId = parseInt(item.dataset.tabId);
-                this.autoAddTabToWindow(tabId);
-            });
+            // 双击功能已移除（画布模式不支持）
 
             // 拖拽开始事件
             item.addEventListener('dragstart', (e) => {
@@ -1410,174 +1299,16 @@ class WindowManager {
         console.log(`🎯 已选择标签页: ${tabId}`);
     }
 
-    /**
-     * 添加标签页到窗口
-     */
-    async addTabToWindow() {
-        if (this.selectedTab === null || this.selectedWindow === null) {
-            this.showStatusMessage('请先选择标签页和窗口', 'error');
-            return;
-        }
 
-        try {
-            // 获取标签页信息
-            const tab = await chrome.tabs.get(this.selectedTab);
-
-            // 加载标签页到窗口
-            await this.loadTabInWindow(tab, this.selectedWindow);
-
-            // 保存映射关系
-            this.windows.set(this.selectedWindow, this.selectedTab);
-
-            // 更新按钮状态
-            this.updateButtonStates();
-
-            console.log(`✅ 标签页 ${this.selectedTab} 已添加到窗口 ${this.selectedWindow}`);
-            this.showStatusMessage(`已添加到窗口 ${this.selectedWindow + 1}`, 'success');
-
-        } catch (error) {
-            console.error('❌ 添加标签页到窗口失败:', error);
-            this.showStatusMessage('添加失败: ' + error.message, 'error');
-        }
-    }
-
-    /**
-     * 在窗口中加载标签页内容
-     */
-    async loadTabInWindow(tab, windowIndex) {
-        const window = document.querySelector(`[data-window-index="${windowIndex}"]`);
-        if (!window) {
-            throw new Error(`窗口 ${windowIndex} 不存在`);
-        }
-
-        const content = window.querySelector('.window-content');
-        const title = window.querySelector('.window-title');
-
-        if (!content || !title) {
-            throw new Error('窗口结构不完整');
-        }
-
-        // 显示加载状态
-        content.innerHTML = `
-            <div class="window-loading">
-                <div class="loading-spinner"></div>
-                <p>加载中...</p>
-            </div>
-        `;
-
-        // 更新窗口标题
-        title.textContent = tab.title || '无标题';
-
-        try {
-            // 创建iframe
-            const iframe = document.createElement('iframe');
-            iframe.className = 'window-iframe';
-            iframe.src = tab.url;
-            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox';
-
-            // 设置加载超时
-            const timeout = setTimeout(() => {
-                console.warn(`⏰ iframe 加载超时: ${tab.url}`);
-                // 不移除iframe，让它继续尝试加载
-            }, 10000);
-
-            // 监听iframe加载事件（合并重复的onload处理）
-            iframe.onload = () => {
-                clearTimeout(timeout);
-                console.log(`📄 iframe 加载完成: ${tab.url}`);
-            };
-
-            iframe.onerror = () => {
-                clearTimeout(timeout);
-                console.error(`❌ iframe 加载失败: ${tab.url}`);
-                this.showIframeError(content, '加载失败');
-            };
-
-            // 替换加载状态为iframe
-            content.innerHTML = '';
-            content.appendChild(iframe);
-
-        } catch (error) {
-            console.error('❌ 创建iframe失败:', error);
-            this.showIframeError(content, error.message);
-            throw error;
-        }
-    }
-
-    /**
-     * 显示iframe错误状态
-     */
-    showIframeError(content, message) {
-        content.innerHTML = `
-            <div class="window-error">
-                <div class="window-error-icon">⚠️</div>
-                <p class="window-error-text">加载失败: ${message}</p>
-            </div>
-        `;
-    }
-
-    /**
-     * 查找空窗口
-     */
-    findEmptyWindow() {
-        const totalWindows = this.config.rows === 1
-            ? this.config.firstRowCount
-            : this.config.firstRowCount + this.config.secondRowCount;
-
-        for (let i = 0; i < totalWindows; i++) {
-            if (!this.windows.has(i)) {
-                return i;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 自动添加标签页到空窗口
-     */
-    async autoAddTabToWindow(tabId) {
-        const emptyWindow = this.findEmptyWindow();
-        if (emptyWindow === null) {
-            this.showStatusMessage('没有空窗口可用', 'error');
-            return false;
-        }
-
-        try {
-            const tab = await chrome.tabs.get(tabId);
-            await this.loadTabInWindow(tab, emptyWindow);
-            this.windows.set(emptyWindow, tabId);
-
-            // 选中这个窗口
-            this.selectWindow(emptyWindow);
-
-            console.log(`✅ 标签页 ${tabId} 已自动添加到窗口 ${emptyWindow}`);
-            this.showStatusMessage(`已添加到窗口 ${emptyWindow + 1}`, 'success');
-            return true;
-
-        } catch (error) {
-            console.error('❌ 自动添加标签页失败:', error);
-            this.showStatusMessage('添加失败: ' + error.message, 'error');
-            return false;
-        }
-    }
 
     /**
      * 处理键盘快捷键
      */
     handleKeyboardShortcuts(e) {
-        // Ctrl/Cmd + Enter: 添加选中标签页到选中窗口
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        // F5: 刷新标签页列表
+        if (e.key === 'F5') {
             e.preventDefault();
-            if (this.selectedTab !== null && this.selectedWindow !== null) {
-                this.addTabToWindow();
-            }
-            return;
-        }
-
-        // Delete/Backspace: 清空选中窗口
-        if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedWindow !== null) {
-            e.preventDefault();
-            this.clearSelectedWindow();
+            this.loadAvailableTabs();
             return;
         }
 
@@ -1587,78 +1318,19 @@ class WindowManager {
             this.clearSelection();
             return;
         }
-
-        // F5: 刷新标签页列表
-        if (e.key === 'F5') {
-            e.preventDefault();
-            this.loadAvailableTabs();
-            return;
-        }
-
-        // 数字键1-9: 选择窗口
-        if (e.key >= '1' && e.key <= '9') {
-            const windowIndex = parseInt(e.key) - 1;
-            const totalWindows = this.config.rows === 1
-                ? this.config.firstRowCount
-                : this.config.firstRowCount + this.config.secondRowCount;
-
-            if (windowIndex < totalWindows) {
-                e.preventDefault();
-                this.selectWindow(windowIndex);
-            }
-            return;
-        }
     }
 
     /**
      * 清除所有选择
      */
     clearSelection() {
-        // 清除窗口选择
-        document.querySelectorAll('.window-item.active').forEach(item => {
-            item.classList.remove('active');
-        });
-        this.selectedWindow = null;
-
         // 清除标签页选择
         document.querySelectorAll('.tab-item.selected').forEach(item => {
             item.classList.remove('selected');
         });
         this.selectedTab = null;
 
-        // 更新按钮状态
-        this.updateButtonStates();
-
         console.log('🔄 已清除所有选择');
-    }
-
-    /**
-     * 获取窗口统计信息
-     */
-    getWindowStats() {
-        const totalWindows = this.config.rows === 1
-            ? this.config.firstRowCount
-            : this.config.firstRowCount + this.config.secondRowCount;
-
-        const usedWindows = this.windows.size;
-        const emptyWindows = totalWindows - usedWindows;
-
-        return {
-            total: totalWindows,
-            used: usedWindows,
-            empty: emptyWindows
-        };
-    }
-
-    /**
-     * 更新状态信息显示
-     */
-    updateStatusInfo() {
-        const stats = this.getWindowStats();
-        const statusText = `窗口: ${stats.used}/${stats.total} 使用中`;
-
-        // 可以在这里更新状态栏显示
-        console.log(`📊 ${statusText}`);
     }
 }
 
