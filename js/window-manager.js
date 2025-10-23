@@ -856,7 +856,8 @@ class WindowManager {
      */
     createWindowElement(window) {
         const windowElement = document.createElement('div');
-        windowElement.className = 'window-item';
+        windowElement.className = 'window-item window';
+        windowElement.id = window.id;
         windowElement.dataset.windowId = window.id;
 
         // 窗口头部
@@ -1061,7 +1062,6 @@ class WindowManager {
             this.windows = [];
             this.selectedWindow = null;
             this.renderCanvas();
-            this.updateButtonStates();
             this.saveConfig();
 
             console.log('🗑️ 已清空所有窗口');
