@@ -605,6 +605,123 @@ body {
     background: white;
 }
 
+/* 窗口加载状态 */
+.window-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #666;
+    font-size: 14px;
+}
+
+.loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #e1e5e9;
+    border-top: 2px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 12px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 窗口错误状态 */
+.window-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #666;
+    text-align: center;
+    padding: 20px;
+}
+
+.window-error-icon {
+    font-size: 32px;
+    margin-bottom: 12px;
+}
+
+.window-error-text {
+    font-size: 14px;
+    margin: 0;
+}
+
+/* 多标签页窗口 */
+.window-tabs-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.window-tabs-header {
+    display: flex;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e1e5e9;
+    overflow-x: auto;
+    flex-shrink: 0;
+}
+
+.window-tab-button {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    color: #666;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.window-tab-button:hover {
+    background: #e9ecef;
+    color: #333;
+}
+
+.window-tab-button.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+    background: white;
+}
+
+.window-tab-button .tab-favicon {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.window-tab-button .tab-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+}
+
+.window-tab-more {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #999;
+    background: #f8f9fa;
+}
+
+.window-tabs-content {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
 /* 窗口状态 */
 .window-empty {
     display: flex;

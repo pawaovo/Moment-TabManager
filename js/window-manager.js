@@ -820,30 +820,12 @@ class WindowManager {
                 <p class="window-empty-text">拖拽标签页到此处</p>
             `;
             content.appendChild(emptyState);
+        } else if (window.tabs.length === 1) {
+            // 单个标签页：显示iframe
+            this.createIframeContent(content, window.tabs[0]);
         } else {
-            // 显示标签页
-            const tabsList = document.createElement('div');
-            tabsList.className = 'window-tabs-list';
-
-            window.tabs.slice(0, 6).forEach(tab => { // 最多显示6个标签页
-                const tabItem = document.createElement('div');
-                tabItem.className = 'window-tab-item';
-                tabItem.innerHTML = `
-                    <img src="${tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="%23999" d="M8 0C3.6 0 0 3.6 0 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8z"/></svg>'}"
-                         alt="" class="tab-favicon">
-                    <span class="tab-title">${tab.title}</span>
-                `;
-                tabsList.appendChild(tabItem);
-            });
-
-            if (window.tabs.length > 6) {
-                const moreItem = document.createElement('div');
-                moreItem.className = 'window-tab-more';
-                moreItem.textContent = `+${window.tabs.length - 6} 更多`;
-                tabsList.appendChild(moreItem);
-            }
-
-            content.appendChild(tabsList);
+            // 多个标签页：显示标签页切换界面
+            this.createTabsContent(content, window.tabs);
         }
 
         // 添加调整手柄
@@ -861,6 +843,133 @@ class WindowManager {
         windowElement.appendChild(content);
 
         return windowElement;
+    }
+
+    /**
+     * 创建iframe内容（单个标签页）
+     */
+    createIframeContent(content, tab) {
+        try {
+            // 显示加载状态
+            content.innerHTML = `
+                <div class="window-loading">
+                    <div class="loading-spinner"></div>
+                    <p>加载中...</p>
+                </div>
+            `;
+
+            // 创建iframe
+            const iframe = document.createElement('iframe');
+            iframe.className = 'window-iframe';
+            iframe.src = tab.url;
+            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox';
+
+            // 设置加载超时
+            const timeout = setTimeout(() => {
+                console.warn(`⏰ iframe 加载超时: ${tab.url}`);
+                // 不移除iframe，让它继续尝试加载
+            }, 10000);
+
+            // 监听iframe加载事件
+            iframe.onload = () => {
+                clearTimeout(timeout);
+                console.log(`📄 iframe 加载完成: ${tab.url}`);
+            };
+
+            iframe.onerror = () => {
+                clearTimeout(timeout);
+                console.error(`❌ iframe 加载失败: ${tab.url}`);
+                this.showIframeError(content, '加载失败');
+            };
+
+            // 替换加载状态为iframe
+            content.innerHTML = '';
+            content.appendChild(iframe);
+
+        } catch (error) {
+            console.error('❌ 创建iframe失败:', error);
+            this.showIframeError(content, error.message);
+        }
+    }
+
+    /**
+     * 创建标签页切换内容（多个标签页）
+     */
+    createTabsContent(content, tabs) {
+        // 创建标签页切换界面
+        const tabsContainer = document.createElement('div');
+        tabsContainer.className = 'window-tabs-container';
+
+        // 标签页头部
+        const tabsHeader = document.createElement('div');
+        tabsHeader.className = 'window-tabs-header';
+
+        tabs.slice(0, 6).forEach((tab, index) => {
+            const tabButton = document.createElement('button');
+            tabButton.className = `window-tab-button ${index === 0 ? 'active' : ''}`;
+            tabButton.dataset.tabIndex = index;
+            tabButton.innerHTML = `
+                <img src="${tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="%23999" d="M8 0C3.6 0 0 3.6 0 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8z"/></svg>'}"
+                     alt="" class="tab-favicon">
+                <span class="tab-title">${tab.title}</span>
+            `;
+
+            // 标签页切换事件
+            tabButton.addEventListener('click', () => {
+                this.switchWindowTab(content, tabs, index);
+            });
+
+            tabsHeader.appendChild(tabButton);
+        });
+
+        if (tabs.length > 6) {
+            const moreButton = document.createElement('div');
+            moreButton.className = 'window-tab-more';
+            moreButton.textContent = `+${tabs.length - 6} 更多`;
+            tabsHeader.appendChild(moreButton);
+        }
+
+        // 标签页内容区域
+        const tabsContent = document.createElement('div');
+        tabsContent.className = 'window-tabs-content';
+
+        tabsContainer.appendChild(tabsHeader);
+        tabsContainer.appendChild(tabsContent);
+        content.appendChild(tabsContainer);
+
+        // 默认显示第一个标签页
+        this.switchWindowTab(content, tabs, 0);
+    }
+
+    /**
+     * 切换窗口内的标签页
+     */
+    switchWindowTab(content, tabs, tabIndex) {
+        const tab = tabs[tabIndex];
+        if (!tab) return;
+
+        // 更新标签页按钮状态
+        content.querySelectorAll('.window-tab-button').forEach((btn, index) => {
+            btn.classList.toggle('active', index === tabIndex);
+        });
+
+        // 更新内容区域
+        const tabsContent = content.querySelector('.window-tabs-content');
+        if (tabsContent) {
+            this.createIframeContent(tabsContent, tab);
+        }
+    }
+
+    /**
+     * 显示iframe错误状态
+     */
+    showIframeError(content, message) {
+        content.innerHTML = `
+            <div class="window-error">
+                <div class="window-error-icon">⚠️</div>
+                <p class="window-error-text">加载失败: ${message}</p>
+            </div>
+        `;
     }
 
     /**
