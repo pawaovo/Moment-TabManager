@@ -885,6 +885,32 @@ body {
     font-size: 12px;
     font-weight: 600;
     color: #0066cc;
+    position: relative;
+    cursor: grab;
+    transition: all 0.2s ease;
+}
+
+.tab-group-header:hover {
+    background: #d1ecff;
+}
+
+.tab-group-header.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.tab-group-header .drag-hint {
+    position: absolute;
+    right: 12px;
+    font-size: 10px;
+    color: #0066cc;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.tab-group-header:hover .drag-hint {
+    opacity: 0.7;
 }
 
 .tab-group-color {

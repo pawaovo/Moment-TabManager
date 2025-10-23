@@ -157,6 +157,33 @@ class WindowManager {
     }
 
     /**
+     * 移除窗口元素（不刷新整个画布）
+     */
+    removeWindowElement(id) {
+        try {
+            // 从数据中删除窗口
+            this.deleteWindow(id);
+
+            // 从DOM中移除窗口元素
+            const windowElement = document.querySelector(`[data-window-id="${id}"]`);
+            if (windowElement) {
+                windowElement.remove();
+                WindowManager.log(`窗口元素已移除: ${id}`);
+            }
+
+            // 保存配置
+            this.saveConfig();
+
+            // 显示状态消息
+            this.showStatusMessage(`已删除窗口: ${id}`, 'success');
+
+        } catch (error) {
+            console.error('❌ 删除窗口失败:', error);
+            this.showStatusMessage('删除窗口失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
      * 查找指定位置的窗口
      */
     findWindowAt(x, y) {
@@ -799,8 +826,7 @@ class WindowManager {
         closeBtn.innerHTML = '×';
         closeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.deleteWindow(window.id);
-            this.renderCanvas();
+            this.removeWindowElement(window.id);
         });
 
         controls.appendChild(closeBtn);
@@ -1176,9 +1202,10 @@ class WindowManager {
     renderTabGroup(group, tabs) {
         const groupColor = group.color || 'grey';
         let html = '<div class="tab-group">';
-        html += '<div class="tab-group-header">';
+        html += `<div class="tab-group-header draggable" data-group-id="${group.id}" draggable="true">`;
         html += `<div class="tab-group-color" style="background-color: ${groupColor};"></div>`;
         html += `<span>${group.title || '未命名分组'} (${tabs.length})</span>`;
+        html += '<div class="drag-hint">拖拽分组到画布</div>';
         html += '</div>';
         html += '<div class="tab-group-tabs">';
         tabs.forEach(tab => {
@@ -1266,23 +1293,26 @@ class WindowManager {
         });
 
         // 绑定标签页分组拖拽事件
-        document.querySelectorAll('.tab-group').forEach(group => {
-            group.addEventListener('dragstart', (e) => {
-                const groupId = parseInt(group.dataset.groupId);
+        document.querySelectorAll('.tab-group-header[data-group-id]').forEach(header => {
+            header.addEventListener('dragstart', (e) => {
+                const groupId = parseInt(header.dataset.groupId);
                 const tabs = this.availableTabs.filter(tab => tab.groupId === groupId);
-                if (tabs.length > 0) {
+                const group = this.availableTabGroups.find(g => g.id === groupId);
+
+                if (tabs.length > 0 && group) {
                     const dragData = {
                         type: 'tabGroup',
+                        group: group,
                         tabs: tabs
                     };
                     e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
                     e.dataTransfer.effectAllowed = 'copy';
-                    group.classList.add('dragging');
+                    header.classList.add('dragging');
                 }
             });
 
-            group.addEventListener('dragend', (e) => {
-                group.classList.remove('dragging');
+            header.addEventListener('dragend', (e) => {
+                header.classList.remove('dragging');
             });
         });
     }
