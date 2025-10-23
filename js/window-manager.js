@@ -596,33 +596,107 @@ class WindowManager {
     }
 
     /**
-     * 从标签页分组创建窗口
+     * 从标签页分组创建多个独立窗口
      */
-    createWindowFromTabGroup(tabs, x, y) {
-        const windowSize = this.calculateWindowSize(tabs);
-        const window = this.createWindow(x, y, windowSize.width, windowSize.height, tabs);
-        this.renderWindow(window);
+    createWindowFromTabGroup(tabs, startX, startY) {
+        // 限制最多6个标签页
+        const limitedTabs = tabs.slice(0, 6);
+        const tabCount = limitedTabs.length;
+
+        // 根据标签页数量确定窗口尺寸
+        const windowSize = this.calculateSingleWindowSize(tabCount);
+
+        // 计算布局配置
+        const layoutConfig = this.calculateGroupLayout(tabCount, startX, startY, windowSize);
+
+        const createdWindows = [];
+
+        // 为每个标签页创建独立窗口
+        limitedTabs.forEach((tab, index) => {
+            const position = layoutConfig.positions[index];
+            const window = this.createWindow(
+                position.x,
+                position.y,
+                windowSize.width,
+                windowSize.height,
+                [tab] // 每个窗口只包含一个标签页
+            );
+            this.renderWindow(window);
+            createdWindows.push(window);
+        });
+
         this.saveConfig();
 
-        WindowManager.log(`从分组创建窗口: ${tabs.length}个标签页`);
-        this.showStatusMessage(`已创建窗口: ${tabs.length}个标签页`, 'success');
+        WindowManager.log(`从分组创建${createdWindows.length}个独立窗口`);
+        this.showStatusMessage(`已创建${createdWindows.length}个窗口`, 'success');
+
+        return createdWindows;
     }
 
     /**
-     * 计算窗口尺寸
+     * 计算单个窗口尺寸（用于分组中的每个标签页）
+     */
+    calculateSingleWindowSize(totalTabsInGroup) {
+        if (totalTabsInGroup <= 3) {
+            return { width: 2, height: 4 }; // 2列×4行，8个单元格，1/3页面
+        } else {
+            return { width: 2, height: 2 }; // 2列×2行，4个单元格，1/6页面
+        }
+    }
+
+    /**
+     * 计算窗口尺寸（兼容旧方法）
      */
     calculateWindowSize(tabs) {
         const tabCount = tabs.length;
 
         if (tabCount === 1) {
-            return { width: 2, height: 2 }; // 2×2单元格
+            return { width: 2, height: 2 }; // 单个标签页：2×2单元格
         } else if (tabCount <= 3) {
-            return { width: 2, height: 2 }; // 2×2单元格
+            return { width: 2, height: 4 }; // ≤3个：2×4单元格
         } else if (tabCount <= 6) {
             return { width: 3, height: 2 }; // 3×2单元格
         } else {
             return { width: 3, height: 3 }; // 3×3单元格
         }
+    }
+
+    /**
+     * 计算分组布局（为多个窗口计算位置）
+     */
+    calculateGroupLayout(tabCount, startX, startY, windowSize) {
+        const positions = [];
+        const { width: windowWidth, height: windowHeight } = windowSize;
+
+        if (tabCount <= 3) {
+            // ≤3个标签页：每个窗口2×4，水平排列
+            for (let i = 0; i < tabCount; i++) {
+                const x = startX + (i * windowWidth);
+                // 确保不超出画布边界
+                const finalX = Math.min(x, this.canvasConfig.gridCols - windowWidth);
+                const finalY = Math.min(startY, this.canvasConfig.gridRows - windowHeight);
+
+                positions.push({ x: finalX, y: finalY });
+            }
+        } else {
+            // 4-6个标签页：每个窗口2×2，网格排列
+            const cols = 3; // 每行最多3个窗口
+            for (let i = 0; i < tabCount; i++) {
+                const row = Math.floor(i / cols);
+                const col = i % cols;
+
+                const x = startX + (col * windowWidth);
+                const y = startY + (row * windowHeight);
+
+                // 确保不超出画布边界
+                const finalX = Math.min(x, this.canvasConfig.gridCols - windowWidth);
+                const finalY = Math.min(y, this.canvasConfig.gridRows - windowHeight);
+
+                positions.push({ x: finalX, y: finalY });
+            }
+        }
+
+        return { positions };
     }
 
     /**
