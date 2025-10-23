@@ -38,9 +38,6 @@ class WindowManager {
         // 当前选中的窗口
         this.selectedWindow = null;
 
-        // 🔧 新增：当前聚焦的窗口（用于刷新操作）
-        this.focusedWindow = null;
-
         // 窗口ID计数器
         this.windowIdCounter = 1;
 
@@ -945,8 +942,7 @@ class WindowManager {
             const iframe = document.createElement('iframe');
             iframe.className = 'window-iframe';
             iframe.src = tab.url;
-            // 🔧 修复：收紧sandbox权限，移除allow-popups-to-escape-sandbox
-            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups';
+            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox';
 
             // 设置加载超时
             const timeout = setTimeout(() => {
@@ -958,9 +954,6 @@ class WindowManager {
             iframe.onload = () => {
                 clearTimeout(timeout);
                 console.log(`📄 iframe 加载完成: ${tab.url}`);
-
-                // 🔧 修复：添加iframe事件隔离，防止事件冒泡影响父页面
-                this.setupIframeEventIsolation(iframe);
             };
 
             iframe.onerror = () => {
@@ -972,9 +965,6 @@ class WindowManager {
             // 替换加载状态为iframe
             content.innerHTML = '';
             content.appendChild(iframe);
-
-            // 🔧 新增：为iframe添加焦点管理
-            this.setupIframeFocusManagement(iframe);
 
         } catch (error) {
             console.error('❌ 创建iframe失败:', error);
@@ -1315,16 +1305,10 @@ class WindowManager {
      * 处理键盘快捷键
      */
     handleKeyboardShortcuts(e) {
-        // F5: 智能刷新处理
+        // F5: 刷新标签页列表
         if (e.key === 'F5') {
             e.preventDefault();
-
-            // 🔧 新增：如果有聚焦的窗口，则刷新该窗口；否则刷新标签页列表
-            if (this.focusedWindow) {
-                this.refreshFocusedWindow();
-            } else {
-                this.loadAvailableTabs();
-            }
+            this.loadAvailableTabs();
             return;
         }
 
@@ -1347,151 +1331,6 @@ class WindowManager {
         this.selectedTab = null;
 
         console.log('🔄 已清除所有选择');
-    }
-
-    /**
-     * 🔧 修复：检查事件是否来自iframe
-     */
-    isEventFromIframe(e) {
-        // 检查事件目标是否是iframe或iframe内的元素
-        if (e.target.tagName === 'IFRAME') {
-            return true;
-        }
-
-        // 检查事件是否来自iframe内部
-        let element = e.target;
-        while (element && element !== document) {
-            if (element.tagName === 'IFRAME') {
-                return true;
-            }
-            element = element.parentElement;
-        }
-
-        return false;
-    }
-
-    /**
-     * 🔧 修复：为iframe设置事件隔离
-     */
-    setupIframeEventIsolation(iframe) {
-        try {
-            // 等待iframe完全加载
-            iframe.addEventListener('load', () => {
-                try {
-                    // 检查是否可以访问iframe内容（同源策略）
-                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                    if (!iframeDoc) {
-                        console.log('⚠️ 无法访问iframe内容，可能是跨域限制');
-                        return;
-                    }
-
-                    // 阻止iframe内的关键事件冒泡到父页面
-                    const eventsToIsolate = ['keydown', 'keyup', 'keypress'];
-                    eventsToIsolate.forEach(eventType => {
-                        iframeDoc.addEventListener(eventType, (e) => {
-                            // 对于F5等关键按键，阻止冒泡
-                            if (e.key === 'F5' || e.key === 'Escape') {
-                                e.stopPropagation();
-                                console.log(`🔒 已阻止iframe内${e.key}事件冒泡`);
-                            }
-                        }, true);
-                    });
-
-                    console.log('✅ iframe事件隔离已设置');
-
-                } catch (error) {
-                    // 跨域限制，无法访问iframe内容
-                    console.log('⚠️ 无法为iframe设置事件隔离，可能是跨域限制:', error.message);
-                }
-            });
-
-        } catch (error) {
-            console.log('⚠️ 设置iframe事件隔离失败:', error.message);
-        }
-    }
-
-    /**
-     * 🔧 新增：为iframe设置焦点管理
-     */
-    setupIframeFocusManagement(iframe) {
-        // 获取iframe所属的窗口
-        const windowElement = iframe.closest('.window-item');
-        if (!windowElement) return;
-
-        const windowId = windowElement.dataset.windowId;
-
-        // 监听iframe焦点事件
-        iframe.addEventListener('focus', () => {
-            this.setFocusedWindow(windowId);
-        });
-
-        // 监听iframe点击事件（也表示获得焦点）
-        iframe.addEventListener('click', () => {
-            this.setFocusedWindow(windowId);
-        });
-
-        // 监听窗口容器点击事件
-        windowElement.addEventListener('click', () => {
-            this.setFocusedWindow(windowId);
-        });
-
-        console.log(`🎯 已为窗口 ${windowId} 设置焦点管理`);
-    }
-
-    /**
-     * 🔧 新增：设置当前聚焦的窗口
-     */
-    setFocusedWindow(windowId) {
-        // 移除之前窗口的聚焦状态
-        if (this.focusedWindow) {
-            const prevWindow = document.querySelector(`[data-window-id="${this.focusedWindow}"]`);
-            if (prevWindow) {
-                prevWindow.classList.remove('focused');
-            }
-        }
-
-        // 设置新的聚焦窗口
-        this.focusedWindow = windowId;
-        const currentWindow = document.querySelector(`[data-window-id="${windowId}"]`);
-        if (currentWindow) {
-            currentWindow.classList.add('focused');
-        }
-
-        console.log(`🎯 窗口焦点已切换到: ${windowId}`);
-    }
-
-    /**
-     * 🔧 新增：刷新当前聚焦的窗口
-     */
-    refreshFocusedWindow() {
-        if (!this.focusedWindow) {
-            console.log('⚠️ 没有聚焦的窗口，无法刷新');
-            return;
-        }
-
-        const windowElement = document.querySelector(`[data-window-id="${this.focusedWindow}"]`);
-        if (!windowElement) {
-            console.log('⚠️ 找不到聚焦的窗口元素');
-            this.focusedWindow = null;
-            return;
-        }
-
-        const iframe = windowElement.querySelector('iframe');
-        if (!iframe) {
-            console.log('⚠️ 聚焦窗口中没有iframe');
-            return;
-        }
-
-        // 刷新iframe
-        const currentSrc = iframe.src;
-        iframe.src = 'about:blank';
-
-        // 短暂延迟后重新加载
-        setTimeout(() => {
-            iframe.src = currentSrc;
-            console.log(`🔄 已刷新窗口: ${this.focusedWindow}`);
-            this.showStatusMessage(`已刷新窗口: ${this.focusedWindow}`, 'success');
-        }, 100);
     }
 }
 
