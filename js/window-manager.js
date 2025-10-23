@@ -950,7 +950,8 @@ class WindowManager {
             const iframe = document.createElement('iframe');
             iframe.className = 'window-iframe';
             iframe.src = tab.url;
-            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox';
+            // 🎯 增强sandbox权限，支持更多功能
+            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-orientation-lock allow-pointer-lock allow-presentation allow-top-navigation-by-user-activation';
 
             // 设置加载超时
             const timeout = setTimeout(() => {
@@ -959,22 +960,15 @@ class WindowManager {
             }, 10000);
 
             // 监听iframe加载事件
-            iframe.onload = async () => {
+            iframe.onload = () => {
                 clearTimeout(timeout);
                 console.log(`📄 iframe 加载完成: ${tab.url}`);
 
-                // 🎯 新增：尝试创建真实浏览器窗口
-                const windowElement = content.closest('.window-item');
-                if (windowElement) {
-                    const success = await this.createRealBrowserWindow(tab, windowElement);
-                    if (success) {
-                        console.log('✅ 已升级为真实浏览器窗口');
-                        // 显示占位符
-                        this.showRealWindowPlaceholder(content, tab);
-                    } else {
-                        console.log('⚠️ 保持iframe模式');
-                    }
-                }
+                // 🎯 注入扩展功能脚本（增强iframe功能）
+                this.injectIframeExtensionScript(iframe);
+
+                // 🎯 防止iframe导航事件影响父页面
+                this.preventIframeNavigationEvents(iframe);
             };
 
             iframe.onerror = () => {
@@ -1062,94 +1056,93 @@ class WindowManager {
     }
 
     /**
-     * 创建真实浏览器窗口（替代iframe方案）
+     * 注入iframe扩展功能脚本（增强iframe功能）
      */
-    async createRealBrowserWindow(tab, windowElement) {
+    injectIframeExtensionScript(iframe) {
         try {
             // 检查是否在扩展环境中
-            if (typeof chrome === 'undefined' || !chrome.windows) {
-                console.log('⚠️ 非扩展环境或不支持windows API，保持iframe模式');
-                return false;
+            if (typeof chrome === 'undefined' || !chrome.runtime) {
+                console.log('⚠️ 非扩展环境，跳过脚本注入');
+                return;
             }
 
-            console.log('🔧 创建真实浏览器窗口:', tab.url);
+            // 获取iframe的URL
+            const iframeUrl = iframe.src;
+            if (!iframeUrl) {
+                console.log('⚠️ iframe没有src属性，无法注入脚本');
+                return;
+            }
 
-            // 获取窗口元素的位置和尺寸
-            const rect = windowElement.getBoundingClientRect();
-            const screenX = window.screenX + rect.left;
-            const screenY = window.screenY + rect.top;
+            console.log('🔧 开始注入iframe扩展脚本:', iframeUrl);
 
-            // 创建新的浏览器窗口
-            const newWindow = await chrome.windows.create({
-                url: tab.url,
-                type: 'normal',
-                left: Math.round(screenX),
-                top: Math.round(screenY),
-                width: Math.round(rect.width),
-                height: Math.round(rect.height),
-                focused: false
+            // 向background script发送消息，请求注入脚本
+            chrome.runtime.sendMessage({
+                type: 'injectIframeScript',
+                data: {
+                    url: iframeUrl,
+                    parentWindowId: `window-manager-${Date.now()}`,
+                    triggerConfig: {
+                        method: 'alt+click',
+                        key: 'altKey',
+                        checkExpression: 'e.altKey'
+                    },
+                    delay: 300
+                }
+            }, (response) => {
+                if (response && response.success) {
+                    console.log('✅ iframe扩展脚本注入成功');
+                    // 添加增强功能指示器
+                    this.markIframeAsEnhanced(iframe);
+                } else {
+                    console.log('⚠️ iframe扩展脚本注入失败:', response?.error || 'Unknown error');
+                }
             });
 
-            // 存储窗口ID以便后续管理
-            windowElement.dataset.chromeWindowId = newWindow.id;
+        } catch (error) {
+            console.log('⚠️ 注入iframe扩展脚本失败:', error.message);
+        }
+    }
 
-            // 隐藏iframe，显示占位符
-            const iframe = windowElement.querySelector('iframe');
-            if (iframe) {
-                iframe.style.display = 'none';
-            }
+    /**
+     * 防止iframe导航事件影响父页面
+     */
+    preventIframeNavigationEvents(iframe) {
+        try {
+            // 监听iframe内的导航事件，防止影响父页面
+            iframe.addEventListener('load', (e) => {
+                e.stopPropagation();
+            }, true);
 
-            // 添加窗口控制按钮
-            this.addWindowControls(windowElement, newWindow.id, tab);
+            // 防止iframe内的表单提交影响父页面
+            iframe.addEventListener('submit', (e) => {
+                e.stopPropagation();
+            }, true);
 
-            console.log('✅ 真实浏览器窗口创建成功:', newWindow.id);
-            return true;
+            // 防止iframe内的点击事件冒泡
+            iframe.addEventListener('click', (e) => {
+                e.stopPropagation();
+            }, true);
+
+            console.log('✅ iframe事件隔离已设置');
 
         } catch (error) {
-            console.log('⚠️ 创建真实浏览器窗口失败:', error.message);
-            return false;
+            console.log('⚠️ 设置iframe事件隔离失败:', error.message);
         }
     }
 
     /**
-     * 添加窗口控制按钮
+     * 标记iframe为功能增强状态
      */
-    addWindowControls(windowElement, chromeWindowId, tab) {
-        const header = windowElement.querySelector('.window-header');
-        if (!header) return;
-
-        // 移除现有的升级按钮（如果存在）
-        const existingUpgradeBtn = header.querySelector('.window-upgrade-btn');
-        if (existingUpgradeBtn) {
-            existingUpgradeBtn.remove();
+    markIframeAsEnhanced(iframe) {
+        try {
+            const windowContent = iframe.closest('.window-content');
+            if (windowContent) {
+                windowContent.classList.add('iframe-enhanced');
+                console.log('✅ iframe已标记为功能增强状态');
+            }
+        } catch (error) {
+            console.log('⚠️ 标记iframe增强状态失败:', error.message);
         }
-
-        // 添加窗口状态指示器
-        const statusIndicator = document.createElement('div');
-        statusIndicator.className = 'window-status-indicator';
-        statusIndicator.innerHTML = '🪟 真实窗口';
-        statusIndicator.title = '此窗口已升级为真实浏览器窗口';
-
-        const title = header.querySelector('.window-title');
-        if (title) {
-            title.appendChild(statusIndicator);
-        }
-    }
-
-    /**
-     * 显示真实窗口占位符
-     */
-    showRealWindowPlaceholder(content, tab) {
-        content.innerHTML = `
-            <div class="window-real-placeholder">
-                <div class="window-real-placeholder-icon">🪟</div>
-                <div class="window-real-placeholder-text">
-                    <p>此窗口已升级为真实浏览器窗口</p>
-                    <p>请在桌面上查看独立窗口</p>
-                    <p style="font-size: 12px; opacity: 0.8; margin-top: 8px;">${tab.title}</p>
-                </div>
-            </div>
-        `;
     }
 
     /**
