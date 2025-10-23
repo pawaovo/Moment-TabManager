@@ -982,3 +982,43 @@ body {
     font-size: 11px;
     line-height: 1.4;
 }
+
+/* 窗口状态指示器 */
+.window-status-indicator {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 6px;
+    background: #28a745;
+    color: white;
+    font-size: 10px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+/* 真实窗口模式下的iframe隐藏 */
+.window-item[data-chrome-window-id] .window-iframe {
+    display: none;
+}
+
+/* 真实窗口占位符 */
+.window-real-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-size: 16px;
+    text-align: center;
+}
+
+.window-real-placeholder-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.window-real-placeholder-text {
+    margin: 0;
+    font-weight: bold;
+}

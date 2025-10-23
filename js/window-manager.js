@@ -161,15 +161,23 @@ class WindowManager {
      */
     removeWindowElement(id) {
         try {
-            // 从数据中删除窗口
-            this.deleteWindow(id);
-
             // 从DOM中移除窗口元素
             const windowElement = document.querySelector(`[data-window-id="${id}"]`);
             if (windowElement) {
+                // 如果是真实窗口，先关闭Chrome窗口
+                const chromeWindowId = windowElement.dataset.chromeWindowId;
+                if (chromeWindowId && typeof chrome !== 'undefined' && chrome.windows) {
+                    chrome.windows.remove(parseInt(chromeWindowId)).catch(error => {
+                        console.log('⚠️ 关闭Chrome窗口失败:', error.message);
+                    });
+                }
+
                 windowElement.remove();
                 WindowManager.log(`窗口元素已移除: ${id}`);
             }
+
+            // 从数据中删除窗口
+            this.deleteWindow(id);
 
             // 保存配置
             this.saveConfig();
@@ -951,12 +959,22 @@ class WindowManager {
             }, 10000);
 
             // 监听iframe加载事件
-            iframe.onload = () => {
+            iframe.onload = async () => {
                 clearTimeout(timeout);
                 console.log(`📄 iframe 加载完成: ${tab.url}`);
 
-                // 🎯 新增：注入扩展功能脚本（借鉴链接弹窗机制）
-                this.injectIframeExtensionScript(iframe);
+                // 🎯 新增：尝试创建真实浏览器窗口
+                const windowElement = content.closest('.window-item');
+                if (windowElement) {
+                    const success = await this.createRealBrowserWindow(tab, windowElement);
+                    if (success) {
+                        console.log('✅ 已升级为真实浏览器窗口');
+                        // 显示占位符
+                        this.showRealWindowPlaceholder(content, tab);
+                    } else {
+                        console.log('⚠️ 保持iframe模式');
+                    }
+                }
             };
 
             iframe.onerror = () => {
@@ -1044,49 +1062,94 @@ class WindowManager {
     }
 
     /**
-     * 注入iframe扩展功能脚本（借鉴链接弹窗机制）
+     * 创建真实浏览器窗口（替代iframe方案）
      */
-    injectIframeExtensionScript(iframe) {
+    async createRealBrowserWindow(tab, windowElement) {
         try {
             // 检查是否在扩展环境中
-            if (typeof chrome === 'undefined' || !chrome.runtime) {
-                console.log('⚠️ 非扩展环境，跳过脚本注入');
-                return;
+            if (typeof chrome === 'undefined' || !chrome.windows) {
+                console.log('⚠️ 非扩展环境或不支持windows API，保持iframe模式');
+                return false;
             }
 
-            // 获取iframe的URL
-            const iframeUrl = iframe.src;
-            if (!iframeUrl) {
-                console.log('⚠️ iframe没有src属性，无法注入脚本');
-                return;
-            }
+            console.log('🔧 创建真实浏览器窗口:', tab.url);
 
-            console.log('🔧 开始注入iframe扩展脚本:', iframeUrl);
+            // 获取窗口元素的位置和尺寸
+            const rect = windowElement.getBoundingClientRect();
+            const screenX = window.screenX + rect.left;
+            const screenY = window.screenY + rect.top;
 
-            // 向background script发送消息，请求注入脚本
-            chrome.runtime.sendMessage({
-                type: 'injectIframeScript',
-                data: {
-                    url: iframeUrl,
-                    parentWindowId: `window-manager-${Date.now()}`,
-                    triggerConfig: {
-                        method: 'alt+click',
-                        key: 'altKey',
-                        checkExpression: 'e.altKey'
-                    },
-                    delay: 300
-                }
-            }, (response) => {
-                if (response && response.success) {
-                    console.log('✅ iframe扩展脚本注入成功');
-                } else {
-                    console.log('⚠️ iframe扩展脚本注入失败:', response?.error || 'Unknown error');
-                }
+            // 创建新的浏览器窗口
+            const newWindow = await chrome.windows.create({
+                url: tab.url,
+                type: 'normal',
+                left: Math.round(screenX),
+                top: Math.round(screenY),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+                focused: false
             });
 
+            // 存储窗口ID以便后续管理
+            windowElement.dataset.chromeWindowId = newWindow.id;
+
+            // 隐藏iframe，显示占位符
+            const iframe = windowElement.querySelector('iframe');
+            if (iframe) {
+                iframe.style.display = 'none';
+            }
+
+            // 添加窗口控制按钮
+            this.addWindowControls(windowElement, newWindow.id, tab);
+
+            console.log('✅ 真实浏览器窗口创建成功:', newWindow.id);
+            return true;
+
         } catch (error) {
-            console.log('⚠️ 注入iframe扩展脚本失败:', error.message);
+            console.log('⚠️ 创建真实浏览器窗口失败:', error.message);
+            return false;
         }
+    }
+
+    /**
+     * 添加窗口控制按钮
+     */
+    addWindowControls(windowElement, chromeWindowId, tab) {
+        const header = windowElement.querySelector('.window-header');
+        if (!header) return;
+
+        // 移除现有的升级按钮（如果存在）
+        const existingUpgradeBtn = header.querySelector('.window-upgrade-btn');
+        if (existingUpgradeBtn) {
+            existingUpgradeBtn.remove();
+        }
+
+        // 添加窗口状态指示器
+        const statusIndicator = document.createElement('div');
+        statusIndicator.className = 'window-status-indicator';
+        statusIndicator.innerHTML = '🪟 真实窗口';
+        statusIndicator.title = '此窗口已升级为真实浏览器窗口';
+
+        const title = header.querySelector('.window-title');
+        if (title) {
+            title.appendChild(statusIndicator);
+        }
+    }
+
+    /**
+     * 显示真实窗口占位符
+     */
+    showRealWindowPlaceholder(content, tab) {
+        content.innerHTML = `
+            <div class="window-real-placeholder">
+                <div class="window-real-placeholder-icon">🪟</div>
+                <div class="window-real-placeholder-text">
+                    <p>此窗口已升级为真实浏览器窗口</p>
+                    <p>请在桌面上查看独立窗口</p>
+                    <p style="font-size: 12px; opacity: 0.8; margin-top: 8px;">${tab.title}</p>
+                </div>
+            </div>
+        `;
     }
 
     /**
