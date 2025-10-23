@@ -982,30 +982,3 @@ body {
     font-size: 11px;
     line-height: 1.4;
 }
-
-/* iframe增强功能样式 */
-.window-iframe {
-    /* 确保iframe能够正常显示扩展功能 */
-    border: none;
-    width: 100%;
-    height: 100%;
-}
-
-/* iframe功能增强指示器 */
-.iframe-enhanced {
-    position: relative;
-}
-
-.iframe-enhanced::after {
-    content: '🔧';
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    background: rgba(40, 167, 69, 0.9);
-    color: white;
-    padding: 2px 4px;
-    border-radius: 3px;
-    font-size: 10px;
-    z-index: 10;
-    pointer-events: none;
-}

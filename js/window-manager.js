@@ -161,23 +161,15 @@ class WindowManager {
      */
     removeWindowElement(id) {
         try {
+            // 从数据中删除窗口
+            this.deleteWindow(id);
+
             // 从DOM中移除窗口元素
             const windowElement = document.querySelector(`[data-window-id="${id}"]`);
             if (windowElement) {
-                // 如果是真实窗口，先关闭Chrome窗口
-                const chromeWindowId = windowElement.dataset.chromeWindowId;
-                if (chromeWindowId && typeof chrome !== 'undefined' && chrome.windows) {
-                    chrome.windows.remove(parseInt(chromeWindowId)).catch(error => {
-                        console.log('⚠️ 关闭Chrome窗口失败:', error.message);
-                    });
-                }
-
                 windowElement.remove();
                 WindowManager.log(`窗口元素已移除: ${id}`);
             }
-
-            // 从数据中删除窗口
-            this.deleteWindow(id);
 
             // 保存配置
             this.saveConfig();
@@ -950,8 +942,8 @@ class WindowManager {
             const iframe = document.createElement('iframe');
             iframe.className = 'window-iframe';
             iframe.src = tab.url;
-            // 🎯 增强sandbox权限，支持更多功能
-            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-orientation-lock allow-pointer-lock allow-presentation allow-top-navigation-by-user-activation';
+            // 🔧 修复：收紧sandbox权限，移除allow-popups-to-escape-sandbox
+            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups';
 
             // 设置加载超时
             const timeout = setTimeout(() => {
@@ -964,11 +956,8 @@ class WindowManager {
                 clearTimeout(timeout);
                 console.log(`📄 iframe 加载完成: ${tab.url}`);
 
-                // 🎯 注入扩展功能脚本（增强iframe功能）
-                this.injectIframeExtensionScript(iframe);
-
-                // 🎯 防止iframe导航事件影响父页面
-                this.preventIframeNavigationEvents(iframe);
+                // 🔧 修复：添加iframe事件隔离，防止事件冒泡影响父页面
+                this.setupIframeEventIsolation(iframe);
             };
 
             iframe.onerror = () => {
@@ -1052,96 +1041,6 @@ class WindowManager {
         const tabsContent = content.querySelector('.window-tabs-content');
         if (tabsContent) {
             this.createIframeContent(tabsContent, tab);
-        }
-    }
-
-    /**
-     * 注入iframe扩展功能脚本（增强iframe功能）
-     */
-    injectIframeExtensionScript(iframe) {
-        try {
-            // 检查是否在扩展环境中
-            if (typeof chrome === 'undefined' || !chrome.runtime) {
-                console.log('⚠️ 非扩展环境，跳过脚本注入');
-                return;
-            }
-
-            // 获取iframe的URL
-            const iframeUrl = iframe.src;
-            if (!iframeUrl) {
-                console.log('⚠️ iframe没有src属性，无法注入脚本');
-                return;
-            }
-
-            console.log('🔧 开始注入iframe扩展脚本:', iframeUrl);
-
-            // 向background script发送消息，请求注入脚本
-            chrome.runtime.sendMessage({
-                type: 'injectIframeScript',
-                data: {
-                    url: iframeUrl,
-                    parentWindowId: `window-manager-${Date.now()}`,
-                    triggerConfig: {
-                        method: 'alt+click',
-                        key: 'altKey',
-                        checkExpression: 'e.altKey'
-                    },
-                    delay: 300
-                }
-            }, (response) => {
-                if (response && response.success) {
-                    console.log('✅ iframe扩展脚本注入成功');
-                    // 添加增强功能指示器
-                    this.markIframeAsEnhanced(iframe);
-                } else {
-                    console.log('⚠️ iframe扩展脚本注入失败:', response?.error || 'Unknown error');
-                }
-            });
-
-        } catch (error) {
-            console.log('⚠️ 注入iframe扩展脚本失败:', error.message);
-        }
-    }
-
-    /**
-     * 防止iframe导航事件影响父页面
-     */
-    preventIframeNavigationEvents(iframe) {
-        try {
-            // 监听iframe内的导航事件，防止影响父页面
-            iframe.addEventListener('load', (e) => {
-                e.stopPropagation();
-            }, true);
-
-            // 防止iframe内的表单提交影响父页面
-            iframe.addEventListener('submit', (e) => {
-                e.stopPropagation();
-            }, true);
-
-            // 防止iframe内的点击事件冒泡
-            iframe.addEventListener('click', (e) => {
-                e.stopPropagation();
-            }, true);
-
-            console.log('✅ iframe事件隔离已设置');
-
-        } catch (error) {
-            console.log('⚠️ 设置iframe事件隔离失败:', error.message);
-        }
-    }
-
-    /**
-     * 标记iframe为功能增强状态
-     */
-    markIframeAsEnhanced(iframe) {
-        try {
-            const windowContent = iframe.closest('.window-content');
-            if (windowContent) {
-                windowContent.classList.add('iframe-enhanced');
-                console.log('✅ iframe已标记为功能增强状态');
-            }
-        } catch (error) {
-            console.log('⚠️ 标记iframe增强状态失败:', error.message);
         }
     }
 
@@ -1410,6 +1309,11 @@ class WindowManager {
      * 处理键盘快捷键
      */
     handleKeyboardShortcuts(e) {
+        // 🔧 修复：检查事件是否来自iframe，如果是则不拦截
+        if (this.isEventFromIframe(e)) {
+            return; // 让iframe自己处理事件
+        }
+
         // F5: 刷新标签页列表
         if (e.key === 'F5') {
             e.preventDefault();
@@ -1436,6 +1340,67 @@ class WindowManager {
         this.selectedTab = null;
 
         console.log('🔄 已清除所有选择');
+    }
+
+    /**
+     * 🔧 修复：检查事件是否来自iframe
+     */
+    isEventFromIframe(e) {
+        // 检查事件目标是否是iframe或iframe内的元素
+        if (e.target.tagName === 'IFRAME') {
+            return true;
+        }
+
+        // 检查事件是否来自iframe内部
+        let element = e.target;
+        while (element && element !== document) {
+            if (element.tagName === 'IFRAME') {
+                return true;
+            }
+            element = element.parentElement;
+        }
+
+        return false;
+    }
+
+    /**
+     * 🔧 修复：为iframe设置事件隔离
+     */
+    setupIframeEventIsolation(iframe) {
+        try {
+            // 等待iframe完全加载
+            iframe.addEventListener('load', () => {
+                try {
+                    // 检查是否可以访问iframe内容（同源策略）
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    if (!iframeDoc) {
+                        console.log('⚠️ 无法访问iframe内容，可能是跨域限制');
+                        return;
+                    }
+
+                    // 阻止iframe内的关键事件冒泡到父页面
+                    const eventsToIsolate = ['keydown', 'keyup', 'keypress'];
+                    eventsToIsolate.forEach(eventType => {
+                        iframeDoc.addEventListener(eventType, (e) => {
+                            // 对于F5等关键按键，阻止冒泡
+                            if (e.key === 'F5' || e.key === 'Escape') {
+                                e.stopPropagation();
+                                console.log(`🔒 已阻止iframe内${e.key}事件冒泡`);
+                            }
+                        }, true);
+                    });
+
+                    console.log('✅ iframe事件隔离已设置');
+
+                } catch (error) {
+                    // 跨域限制，无法访问iframe内容
+                    console.log('⚠️ 无法为iframe设置事件隔离，可能是跨域限制:', error.message);
+                }
+            });
+
+        } catch (error) {
+            console.log('⚠️ 设置iframe事件隔离失败:', error.message);
+        }
     }
 }
 
