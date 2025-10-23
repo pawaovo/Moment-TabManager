@@ -954,6 +954,9 @@ class WindowManager {
             iframe.onload = () => {
                 clearTimeout(timeout);
                 console.log(`📄 iframe 加载完成: ${tab.url}`);
+
+                // 🎯 新增：注入扩展功能脚本（借鉴链接弹窗机制）
+                this.injectIframeExtensionScript(iframe);
             };
 
             iframe.onerror = () => {
@@ -1037,6 +1040,52 @@ class WindowManager {
         const tabsContent = content.querySelector('.window-tabs-content');
         if (tabsContent) {
             this.createIframeContent(tabsContent, tab);
+        }
+    }
+
+    /**
+     * 注入iframe扩展功能脚本（借鉴链接弹窗机制）
+     */
+    injectIframeExtensionScript(iframe) {
+        try {
+            // 检查是否在扩展环境中
+            if (typeof chrome === 'undefined' || !chrome.runtime) {
+                console.log('⚠️ 非扩展环境，跳过脚本注入');
+                return;
+            }
+
+            // 获取iframe的URL
+            const iframeUrl = iframe.src;
+            if (!iframeUrl) {
+                console.log('⚠️ iframe没有src属性，无法注入脚本');
+                return;
+            }
+
+            console.log('🔧 开始注入iframe扩展脚本:', iframeUrl);
+
+            // 向background script发送消息，请求注入脚本
+            chrome.runtime.sendMessage({
+                type: 'injectIframeScript',
+                data: {
+                    url: iframeUrl,
+                    parentWindowId: `window-manager-${Date.now()}`,
+                    triggerConfig: {
+                        method: 'alt+click',
+                        key: 'altKey',
+                        checkExpression: 'e.altKey'
+                    },
+                    delay: 300
+                }
+            }, (response) => {
+                if (response && response.success) {
+                    console.log('✅ iframe扩展脚本注入成功');
+                } else {
+                    console.log('⚠️ iframe扩展脚本注入失败:', response?.error || 'Unknown error');
+                }
+            });
+
+        } catch (error) {
+            console.log('⚠️ 注入iframe扩展脚本失败:', error.message);
         }
     }
 
