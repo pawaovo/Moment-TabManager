@@ -28,6 +28,10 @@ class WindowManager {
         // 窗口数组：存储所有窗口信息
         this.windows = [];
 
+        // 标签页数据
+        this.availableTabs = [];
+        this.availableTabGroups = [];
+
         // 当前选中的标签页
         this.selectedTab = null;
 
@@ -479,7 +483,15 @@ class WindowManager {
      */
     handleCanvasDrop(event) {
         try {
-            const dragData = JSON.parse(event.dataTransfer.getData('text/plain'));
+            const dragDataText = event.dataTransfer.getData('text/plain');
+
+            // 检查是否有拖拽数据
+            if (!dragDataText || dragDataText.trim() === '') {
+                console.warn('⚠️ 没有拖拽数据');
+                return;
+            }
+
+            const dragData = JSON.parse(dragDataText);
             const rect = document.getElementById('canvasContainer').getBoundingClientRect();
 
             // 计算拖拽位置对应的网格坐标
@@ -487,10 +499,14 @@ class WindowManager {
             const pixelY = event.clientY - rect.top;
             const gridPos = this.pixelToGrid(pixelX, pixelY);
 
+            console.log('🎯 拖拽数据:', dragData, '位置:', gridPos);
+
             if (dragData.type === 'tab') {
                 this.createWindowFromTab(dragData.tab, gridPos.x, gridPos.y);
             } else if (dragData.type === 'tabGroup') {
                 this.createWindowFromTabGroup(dragData.tabs, gridPos.x, gridPos.y);
+            } else {
+                console.warn('⚠️ 未知的拖拽类型:', dragData.type);
             }
 
         } catch (error) {
@@ -970,6 +986,10 @@ class WindowManager {
             // 获取标签分组
             const tabGroups = await chrome.tabGroups.query({});
 
+            // 保存标签页数据供拖拽使用
+            this.availableTabs = tabs;
+            this.availableTabGroups = tabGroups;
+
             // 渲染标签页列表
             this.renderTabsList(tabs, tabGroups);
 
@@ -978,6 +998,9 @@ class WindowManager {
             console.error('❌ 加载标签页失败:', error);
             tabsList.innerHTML = '<div class="empty-message">加载失败</div>';
             this.showStatusMessage('加载标签页失败', 'error');
+            // 确保数据结构存在
+            this.availableTabs = [];
+            this.availableTabGroups = [];
         }
     }
 
@@ -1068,7 +1091,7 @@ class WindowManager {
 
         return `
             <div class="tab-item draggable" data-tab-id="${tab.id}" title="${title}" draggable="true">
-                <img class="tab-favicon" src="${favicon}" alt="" onerror="this.style.display='none'">
+                <img class="tab-favicon" src="${favicon}" alt="">
                 <div class="tab-info">
                     <div class="tab-title">${title}</div>
                     <div class="tab-url">${domain}</div>
@@ -1093,6 +1116,14 @@ class WindowManager {
      */
     bindTabEvents() {
         document.querySelectorAll('.tab-item').forEach(item => {
+            // 处理图片加载错误
+            const favicon = item.querySelector('.tab-favicon');
+            if (favicon) {
+                favicon.addEventListener('error', () => {
+                    favicon.style.display = 'none';
+                });
+            }
+
             item.addEventListener('click', () => {
                 const tabId = parseInt(item.dataset.tabId);
                 this.selectTab(tabId, item);
