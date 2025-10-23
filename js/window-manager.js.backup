@@ -17,30 +17,28 @@ class WindowManager {
         console.log(`${prefix} WindowManager: ${message}`);
     }
     constructor() {
-        // 画布配置
-        this.canvasConfig = {
-            gridCols: 6,            // 网格列数
-            gridRows: 4,            // 网格行数
-            cellWidth: 0,           // 单元格宽度 (运行时计算)
-            cellHeight: 0           // 单元格高度 (运行时计算)
+        // 配置信息
+        this.config = {
+            rows: 1,                // 行数：1-4
+            firstRowCount: 2,       // 第一行窗口数：1-6
+            secondRowCount: 1,      // 第二行窗口数：1-6
+            thirdRowCount: 1,       // 第三行窗口数：1-6
+            fourthRowCount: 1       // 第四行窗口数：1-6
         };
-
-        // 窗口数组：存储所有窗口信息
-        this.windows = [];
-
+        
+        // 窗口映射：windowIndex -> tabId
+        this.windows = new Map();
+        
         // 当前选中的标签页
         this.selectedTab = null;
-
+        
         // 当前选中的窗口
         this.selectedWindow = null;
-
-        // 窗口ID计数器
-        this.windowIdCounter = 1;
-
+        
         // 存储键名
-        this.STORAGE_KEY = 'window-manager-canvas-config';
-
-        WindowManager.log('初始化画布模式');
+        this.STORAGE_KEY = 'window-manager-config';
+        
+        WindowManager.log('初始化');
     }
 
     /**
@@ -70,156 +68,6 @@ class WindowManager {
             console.error('❌ 窗口管理器初始化失败:', error);
             this.showStatusMessage('初始化失败: ' + error.message, 'error');
         }
-    }
-
-    /**
-     * 创建新窗口
-     */
-    createWindow(x, y, width, height, tabs = []) {
-        const window = {
-            id: `window-${this.windowIdCounter++}`,
-            x: Math.max(0, Math.min(x, this.canvasConfig.gridCols - width)),
-            y: Math.max(0, Math.min(y, this.canvasConfig.gridRows - height)),
-            width: Math.max(1, Math.min(width, this.canvasConfig.gridCols)),
-            height: Math.max(1, Math.min(height, this.canvasConfig.gridRows)),
-            tabs: [...tabs],
-            created: Date.now()
-        };
-
-        // 检查位置是否可用
-        if (!this.isPositionAvailable(window.x, window.y, window.width, window.height)) {
-            // 寻找最近的可用位置
-            const newPosition = this.findNearestValidPosition(window.x, window.y, window.width, window.height);
-            if (newPosition) {
-                window.x = newPosition.x;
-                window.y = newPosition.y;
-            } else {
-                throw new Error('画布空间不足，无法创建窗口');
-            }
-        }
-
-        this.windows.push(window);
-        WindowManager.log(`创建窗口: ${window.id} at (${window.x},${window.y}) size ${window.width}×${window.height}`);
-        return window;
-    }
-
-    /**
-     * 更新窗口属性
-     */
-    updateWindow(id, properties) {
-        const window = this.windows.find(w => w.id === id);
-        if (!window) {
-            throw new Error(`窗口 ${id} 不存在`);
-        }
-
-        const oldWindow = { ...window };
-        Object.assign(window, properties);
-
-        // 验证新位置和尺寸
-        if (properties.x !== undefined || properties.y !== undefined ||
-            properties.width !== undefined || properties.height !== undefined) {
-
-            // 临时移除当前窗口进行碰撞检测
-            const index = this.windows.indexOf(window);
-            this.windows.splice(index, 1);
-
-            if (!this.isPositionAvailable(window.x, window.y, window.width, window.height)) {
-                // 恢复原始状态
-                Object.assign(window, oldWindow);
-                this.windows.splice(index, 0, window);
-                throw new Error('目标位置不可用');
-            }
-
-            // 重新添加窗口
-            this.windows.splice(index, 0, window);
-        }
-
-        WindowManager.log(`更新窗口: ${window.id}`);
-        return window;
-    }
-
-    /**
-     * 删除窗口
-     */
-    deleteWindow(id) {
-        const index = this.windows.findIndex(w => w.id === id);
-        if (index === -1) {
-            throw new Error(`窗口 ${id} 不存在`);
-        }
-
-        const window = this.windows.splice(index, 1)[0];
-        WindowManager.log(`删除窗口: ${window.id}`);
-        return window;
-    }
-
-    /**
-     * 查找指定位置的窗口
-     */
-    findWindowAt(x, y) {
-        return this.windows.find(window =>
-            x >= window.x && x < window.x + window.width &&
-            y >= window.y && y < window.y + window.height
-        );
-    }
-
-    /**
-     * 检查位置是否可用
-     */
-    isPositionAvailable(x, y, width, height) {
-        // 检查边界
-        if (x < 0 || y < 0 || x + width > this.canvasConfig.gridCols || y + height > this.canvasConfig.gridRows) {
-            return false;
-        }
-
-        // 检查与现有窗口的重叠
-        for (const window of this.windows) {
-            if (this.checkWindowCollision(
-                { x, y, width, height },
-                window
-            )) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * 检查两个窗口是否重叠
-     */
-    checkWindowCollision(window1, window2) {
-        return !(
-            window1.x + window1.width <= window2.x ||
-            window2.x + window2.width <= window1.x ||
-            window1.y + window1.height <= window2.y ||
-            window2.y + window2.height <= window1.y
-        );
-    }
-
-    /**
-     * 寻找最近的可用位置
-     */
-    findNearestValidPosition(targetX, targetY, width, height) {
-        const maxDistance = this.canvasConfig.gridCols + this.canvasConfig.gridRows;
-
-        for (let distance = 0; distance <= maxDistance; distance++) {
-            // 搜索以目标位置为中心的正方形区域
-            for (let dx = -distance; dx <= distance; dx++) {
-                for (let dy = -distance; dy <= distance; dy++) {
-                    // 只检查边界上的点
-                    if (Math.abs(dx) !== distance && Math.abs(dy) !== distance) continue;
-
-                    const x = targetX + dx;
-                    const y = targetY + dy;
-
-                    if (this.isPositionAvailable(x, y, width, height)) {
-                        return { x, y };
-                    }
-                }
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -314,20 +162,8 @@ class WindowManager {
         try {
             const result = await StorageUtils.loadSettings(this.STORAGE_KEY);
             if (result) {
-                // 检查是否是旧版本配置
-                if (result.rows !== undefined) {
-                    // 迁移旧配置到新结构
-                    this.windows = this.migrateOldConfig(result);
-                    console.log('📋 已迁移旧配置到画布模式');
-                } else if (result.windows) {
-                    // 加载新配置
-                    this.windows = result.windows || [];
-                    this.canvasConfig = { ...this.canvasConfig, ...result.canvasConfig };
-                    console.log('📋 画布配置已加载:', { windows: this.windows.length, canvasConfig: this.canvasConfig });
-                }
-
-                // 保存迁移后的配置
-                await this.saveConfig();
+                this.config = { ...this.config, ...result };
+                console.log('📋 配置已加载:', this.config);
             }
         } catch (error) {
             console.error('❌ 加载配置失败:', error);
@@ -339,56 +175,12 @@ class WindowManager {
      */
     async saveConfig() {
         try {
-            const config = {
-                windows: this.windows,
-                canvasConfig: this.canvasConfig,
-                version: '2.0'
-            };
-            await StorageUtils.saveSettings(config, this.STORAGE_KEY);
-            console.log('💾 画布配置已保存:', config);
+            await StorageUtils.saveSettings(this.config, this.STORAGE_KEY);
+            console.log('💾 配置已保存:', this.config);
         } catch (error) {
             console.error('❌ 保存配置失败:', error);
             throw error;
         }
-    }
-
-    /**
-     * 迁移旧配置到新结构
-     */
-    migrateOldConfig(oldConfig) {
-        const windows = [];
-        let windowIndex = 0;
-        let currentY = 0;
-
-        // 根据旧配置创建窗口
-        const rowCounts = [oldConfig.firstRowCount || 2];
-        if (oldConfig.rows >= 2) rowCounts.push(oldConfig.secondRowCount || 1);
-        if (oldConfig.rows >= 3) rowCounts.push(oldConfig.thirdRowCount || 1);
-        if (oldConfig.rows >= 4) rowCounts.push(oldConfig.fourthRowCount || 1);
-
-        for (let row = 0; row < (oldConfig.rows || 1); row++) {
-            const windowsInRow = rowCounts[row] || 1;
-            const windowWidth = Math.floor(this.canvasConfig.gridCols / windowsInRow);
-            const windowHeight = Math.floor(this.canvasConfig.gridRows / (oldConfig.rows || 1));
-
-            for (let col = 0; col < windowsInRow; col++) {
-                windows.push({
-                    id: `migrated-window-${windowIndex++}`,
-                    x: col * windowWidth,
-                    y: currentY,
-                    width: windowWidth,
-                    height: windowHeight,
-                    tabs: [],
-                    created: Date.now(),
-                    migrated: true
-                });
-            }
-
-            currentY += windowHeight;
-        }
-
-        WindowManager.log(`迁移完成: 创建了 ${windows.length} 个窗口`);
-        return windows;
     }
 
     /**

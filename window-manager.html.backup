@@ -10,30 +10,13 @@
     <div class="window-manager-container">
         <!-- 主要内容区域 -->
         <main class="window-manager-main">
-            <!-- 左侧：画布区域 -->
+            <!-- 左侧：窗口展示区域 -->
             <div class="windows-container" id="windowsContainer">
-                <!-- 画布容器 -->
-                <div class="canvas-container" id="canvasContainer">
-                    <!-- 网格辅助层 -->
-                    <div class="grid-overlay" id="gridOverlay">
-                        <!-- 网格线将通过CSS生成 -->
-                    </div>
-
-                    <!-- 窗口层 -->
-                    <div class="windows-layer" id="windowsLayer">
-                        <!-- 动态生成的窗口将在这里显示 -->
-                    </div>
-
-                    <!-- 空状态提示 -->
-                    <div class="empty-state" id="emptyState">
-                        <div class="empty-icon">🎨</div>
-                        <h3>欢迎使用画布式窗口管理器</h3>
-                        <p>从右侧标签页列表拖拽标签页到此画布区域创建窗口</p>
-                        <div class="canvas-tips">
-                            <div class="tip-item">💡 支持拖拽调整窗口大小和位置</div>
-                            <div class="tip-item">🎯 所有窗口自动对齐到6×4网格系统</div>
-                        </div>
-                    </div>
+                <!-- 动态生成的窗口将在这里显示 -->
+                <div class="empty-state">
+                    <div class="empty-icon">🪟</div>
+                    <h3>欢迎使用窗口管理器</h3>
+                    <p>将鼠标移至右侧边缘打开设置面板，配置布局并添加标签页到窗口中</p>
                 </div>
             </div>
 
@@ -45,6 +28,57 @@
 
             <!-- 右侧：可收缩侧边栏 -->
             <aside class="control-panel" id="controlPanel">
+                <!-- 布局配置 -->
+                <section class="control-section">
+                    <h3 class="section-title">布局配置</h3>
+                    
+                    <div class="control-item">
+                        <label for="layoutRows">行数</label>
+                        <select id="layoutRows" class="control-select">
+                            <option value="1">单行</option>
+                            <option value="2">双行</option>
+                            <option value="3">三行</option>
+                            <option value="4">四行</option>
+                        </select>
+                    </div>
+
+                    <div class="control-item">
+                        <label for="firstRowCount">第一行窗口数</label>
+                        <select id="firstRowCount" class="control-select">
+                            <option value="1">1个窗口</option>
+                            <option value="2" selected>2个窗口</option>
+                            <option value="3">3个窗口</option>
+                            <option value="4">4个窗口</option>
+                            <option value="5">5个窗口</option>
+                            <option value="6">6个窗口</option>
+                        </select>
+                    </div>
+
+                    <div class="control-item" id="secondRowContainer" style="display: none;">
+                        <label for="secondRowCount">第二行窗口数</label>
+                        <select id="secondRowCount" class="control-select">
+                            <option value="1" selected>1个窗口</option>
+                            <option value="2">2个窗口</option>
+                            <option value="3">3个窗口</option>
+                            <option value="4">4个窗口</option>
+                            <option value="5">5个窗口</option>
+                            <option value="6">6个窗口</option>
+                        </select>
+                    </div>
+
+                    <div class="control-item" id="thirdRowContainer" style="display: none;">
+                        <label for="thirdRowCount">第三行窗口数</label>
+                        <select id="thirdRowCount" class="control-select"></select>
+                    </div>
+
+                    <div class="control-item" id="fourthRowContainer" style="display: none;">
+                        <label for="fourthRowCount">第四行窗口数</label>
+                        <select id="fourthRowCount" class="control-select"></select>
+                    </div>
+
+                    <button class="btn-primary" id="applyLayoutBtn">应用布局</button>
+                </section>
+
                 <!-- 标签页管理 -->
                 <section class="control-section">
                     <h3 class="section-title">标签页管理</h3>
