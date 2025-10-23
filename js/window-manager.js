@@ -19,9 +19,11 @@ class WindowManager {
     constructor() {
         // 配置信息
         this.config = {
-            rows: 1,                // 行数：1或2
-            firstRowCount: 2,       // 第一行窗口数：1-3
-            secondRowCount: 1       // 第二行窗口数：1-3
+            rows: 1,                // 行数：1-4
+            firstRowCount: 2,       // 第一行窗口数：1-6
+            secondRowCount: 1,      // 第二行窗口数：1-6
+            thirdRowCount: 1,       // 第三行窗口数：1-6
+            fourthRowCount: 1       // 第四行窗口数：1-6
         };
         
         // 窗口映射：windowIndex -> tabId
@@ -45,19 +47,22 @@ class WindowManager {
     async init() {
         try {
             WindowManager.log('开始初始化', 'info');
-            
+
+            // 初始化UI组件
+            this.initializeSelectOptions();
+
             // 加载配置
             await this.loadConfig();
-            
+
             // 绑定事件
             this.bindEvents();
-            
+
             // 更新UI
             this.updateUI();
-            
+
             // 加载标签页列表
             await this.loadAvailableTabs();
-            
+
             WindowManager.log('初始化完成', 'success');
         } catch (error) {
             console.error('❌ 窗口管理器初始化失败:', error);
@@ -66,9 +71,36 @@ class WindowManager {
     }
 
     /**
+     * 初始化选择器选项
+     */
+    initializeSelectOptions() {
+        // 为第三行和第四行选择器动态生成选项
+        const selectors = ['thirdRowCount', 'fourthRowCount'];
+
+        selectors.forEach(selectorId => {
+            const select = document.getElementById(selectorId);
+            if (select) {
+                // 清空现有选项
+                select.innerHTML = '';
+
+                // 添加1-6个窗口的选项
+                for (let i = 1; i <= 6; i++) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = `${i}个窗口`;
+                    if (i === 1) option.selected = true; // 默认选择1个窗口
+                    select.appendChild(option);
+                }
+            }
+        });
+    }
+
+    /**
      * 绑定事件监听器
      */
     bindEvents() {
+        // 侧边栏控制事件
+        this.bindSidebarEvents();
         // 布局配置事件
         document.getElementById('layoutRows')?.addEventListener('change', (e) => {
             this.updateLayoutConfig('rows', parseInt(e.target.value));
@@ -80,6 +112,14 @@ class WindowManager {
 
         document.getElementById('secondRowCount')?.addEventListener('change', (e) => {
             this.updateLayoutConfig('secondRowCount', parseInt(e.target.value));
+        });
+
+        document.getElementById('thirdRowCount')?.addEventListener('change', (e) => {
+            this.updateLayoutConfig('thirdRowCount', parseInt(e.target.value));
+        });
+
+        document.getElementById('fourthRowCount')?.addEventListener('change', (e) => {
+            this.updateLayoutConfig('fourthRowCount', parseInt(e.target.value));
         });
 
         // 应用布局按钮
@@ -144,6 +184,31 @@ class WindowManager {
     }
 
     /**
+     * 绑定侧边栏事件
+     */
+    bindSidebarEvents() {
+        const trigger = document.getElementById('sidebarTrigger');
+        const panel = document.getElementById('controlPanel');
+
+        if (!trigger || !panel) return;
+
+        // 鼠标进入触发区域时展开侧边栏
+        trigger.addEventListener('mouseenter', () => {
+            panel.classList.add('expanded');
+        });
+
+        // 鼠标离开侧边栏时收起
+        panel.addEventListener('mouseleave', () => {
+            panel.classList.remove('expanded');
+        });
+
+        // 鼠标进入侧边栏时保持展开
+        panel.addEventListener('mouseenter', () => {
+            panel.classList.add('expanded');
+        });
+    }
+
+    /**
      * 更新布局配置
      */
     async updateLayoutConfig(key, value) {
@@ -162,19 +227,34 @@ class WindowManager {
      * 更新行数控制UI
      */
     updateRowControls() {
+        const rows = this.config.rows;
         const secondRowContainer = document.getElementById('secondRowContainer');
+        const thirdRowContainer = document.getElementById('thirdRowContainer');
+        const fourthRowContainer = document.getElementById('fourthRowContainer');
+
+        // 显示/隐藏行数控制
         if (secondRowContainer) {
-            secondRowContainer.style.display = this.config.rows === 2 ? 'block' : 'none';
+            secondRowContainer.style.display = rows >= 2 ? 'block' : 'none';
+        }
+        if (thirdRowContainer) {
+            thirdRowContainer.style.display = rows >= 3 ? 'block' : 'none';
+        }
+        if (fourthRowContainer) {
+            fourthRowContainer.style.display = rows >= 4 ? 'block' : 'none';
         }
 
         // 更新选择器值
         const layoutRows = document.getElementById('layoutRows');
         const firstRowCount = document.getElementById('firstRowCount');
         const secondRowCount = document.getElementById('secondRowCount');
+        const thirdRowCount = document.getElementById('thirdRowCount');
+        const fourthRowCount = document.getElementById('fourthRowCount');
 
         if (layoutRows) layoutRows.value = this.config.rows.toString();
         if (firstRowCount) firstRowCount.value = this.config.firstRowCount.toString();
         if (secondRowCount) secondRowCount.value = this.config.secondRowCount.toString();
+        if (thirdRowCount) thirdRowCount.value = this.config.thirdRowCount.toString();
+        if (fourthRowCount) fourthRowCount.value = this.config.fourthRowCount.toString();
     }
 
     /**
@@ -214,48 +294,73 @@ class WindowManager {
         container.innerHTML = '';
 
         // 计算总窗口数
-        const totalWindows = this.config.rows === 1
-            ? this.config.firstRowCount
-            : this.config.firstRowCount + this.config.secondRowCount;
+        let totalWindows = this.config.firstRowCount;
+        if (this.config.rows >= 2) totalWindows += this.config.secondRowCount;
+        if (this.config.rows >= 3) totalWindows += this.config.thirdRowCount;
+        if (this.config.rows >= 4) totalWindows += this.config.fourthRowCount;
 
         // 创建网格容器
         const grid = document.createElement('div');
         grid.className = 'windows-grid';
 
-        // 设置网格布局类
-        const layoutClass = this.getLayoutClass();
-        grid.classList.add(layoutClass);
+        // 设置网格布局
+        this.applyGridLayout(grid);
 
-        // 创建窗口
-        for (let i = 0; i < totalWindows; i++) {
-            const window = this.createWindow(i);
-            grid.appendChild(window);
+        // 创建窗口并设置网格位置
+        let windowIndex = 0;
+        const rowCounts = [this.config.firstRowCount];
+        if (this.config.rows >= 2) rowCounts.push(this.config.secondRowCount);
+        if (this.config.rows >= 3) rowCounts.push(this.config.thirdRowCount);
+        if (this.config.rows >= 4) rowCounts.push(this.config.fourthRowCount);
+
+        for (let row = 0; row < this.config.rows; row++) {
+            for (let col = 0; col < rowCounts[row]; col++) {
+                const window = this.createWindow(windowIndex, row + 1, col + 1);
+                grid.appendChild(window);
+                windowIndex++;
+            }
         }
 
         container.appendChild(grid);
-        console.log(`🔄 布局已更新: ${layoutClass}, 总窗口数: ${totalWindows}`);
+        console.log(`🔄 布局已更新: ${this.config.rows}行布局, 总窗口数: ${totalWindows}`);
     }
 
     /**
-     * 获取布局CSS类名
+     * 应用网格布局
      */
-    getLayoutClass() {
-        const { rows, firstRowCount, secondRowCount } = this.config;
+    applyGridLayout(grid) {
+        const { rows, firstRowCount, secondRowCount, thirdRowCount, fourthRowCount } = this.config;
 
-        if (rows === 1) {
-            return `layout-1-${firstRowCount}`;
-        } else {
-            return `layout-2-${firstRowCount}-${secondRowCount}`;
-        }
+        // 计算最大列数
+        const maxColumns = Math.max(
+            firstRowCount,
+            rows >= 2 ? secondRowCount : 0,
+            rows >= 3 ? thirdRowCount : 0,
+            rows >= 4 ? fourthRowCount : 0
+        );
+
+        // 设置网格行和列
+        grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+        grid.style.gridTemplateColumns = `repeat(${maxColumns}, 1fr)`;
+
+        console.log(`🎯 应用网格布局: ${rows}行 × ${maxColumns}列`);
     }
+
+
 
     /**
      * 创建单个窗口
      */
-    createWindow(index) {
+    createWindow(index, gridRow = null, gridColumn = null) {
         const window = document.createElement('div');
         window.className = 'window-item';
         window.dataset.windowIndex = index;
+
+        // 设置网格位置（如果提供）
+        if (gridRow !== null && gridColumn !== null) {
+            window.style.gridRow = gridRow;
+            window.style.gridColumn = gridColumn;
+        }
 
         // 窗口头部
         const header = document.createElement('div');

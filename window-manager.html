@@ -8,17 +8,6 @@
 </head>
 <body>
     <div class="window-manager-container">
-        <!-- 头部 -->
-        <header class="window-manager-header">
-            <div class="header-content">
-                <img src="icons/icon48.png" alt="MomentTabManager" class="header-icon">
-                <div class="header-text">
-                    <h1>窗口管理器</h1>
-                    <p>多窗口网页内容展示</p>
-                </div>
-            </div>
-        </header>
-
         <!-- 主要内容区域 -->
         <main class="window-manager-main">
             <!-- 左侧：窗口展示区域 -->
@@ -27,12 +16,18 @@
                 <div class="empty-state">
                     <div class="empty-icon">🪟</div>
                     <h3>欢迎使用窗口管理器</h3>
-                    <p>从右侧控制面板配置布局并添加标签页到窗口中</p>
+                    <p>将鼠标移至右侧边缘打开设置面板，配置布局并添加标签页到窗口中</p>
                 </div>
             </div>
 
-            <!-- 右侧：控制面板 -->
-            <aside class="control-panel">
+            <!-- 侧边栏触发按钮 -->
+            <div class="sidebar-trigger" id="sidebarTrigger">
+                <span class="trigger-icon">⚙️</span>
+                <span class="trigger-text">设置</span>
+            </div>
+
+            <!-- 右侧：可收缩侧边栏 -->
+            <aside class="control-panel" id="controlPanel">
                 <!-- 布局配置 -->
                 <section class="control-section">
                     <h3 class="section-title">布局配置</h3>
@@ -42,6 +37,8 @@
                         <select id="layoutRows" class="control-select">
                             <option value="1">单行</option>
                             <option value="2">双行</option>
+                            <option value="3">三行</option>
+                            <option value="4">四行</option>
                         </select>
                     </div>
 
@@ -51,6 +48,9 @@
                             <option value="1">1个窗口</option>
                             <option value="2" selected>2个窗口</option>
                             <option value="3">3个窗口</option>
+                            <option value="4">4个窗口</option>
+                            <option value="5">5个窗口</option>
+                            <option value="6">6个窗口</option>
                         </select>
                     </div>
 
@@ -60,7 +60,20 @@
                             <option value="1" selected>1个窗口</option>
                             <option value="2">2个窗口</option>
                             <option value="3">3个窗口</option>
+                            <option value="4">4个窗口</option>
+                            <option value="5">5个窗口</option>
+                            <option value="6">6个窗口</option>
                         </select>
+                    </div>
+
+                    <div class="control-item" id="thirdRowContainer" style="display: none;">
+                        <label for="thirdRowCount">第三行窗口数</label>
+                        <select id="thirdRowCount" class="control-select"></select>
+                    </div>
+
+                    <div class="control-item" id="fourthRowContainer" style="display: none;">
+                        <label for="fourthRowCount">第四行窗口数</label>
+                        <select id="fourthRowCount" class="control-select"></select>
                     </div>
 
                     <button class="btn-primary" id="applyLayoutBtn">应用布局</button>
