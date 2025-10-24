@@ -63,19 +63,21 @@ body {
 
 .tab-button {
     flex: 1;
-    padding: 15px 20px;
+    padding: 12px 8px;
     border: none;
     background: transparent;
     color: #6c757d;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     border-bottom: 3px solid transparent;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .tab-button:hover {
@@ -248,6 +250,50 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 10px 12px;
+}
+
+.clickable-shortcut {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 6px;
+}
+
+.clickable-shortcut:hover {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+.shortcut-hint {
+    font-size: 12px;
+    color: #6c757d;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.clickable-shortcut:hover .shortcut-hint {
+    opacity: 1;
+}
+
+.clickable-shortcut {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 6px;
+}
+
+.clickable-shortcut:hover {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+.shortcut-hint {
+    font-size: 12px;
+    color: #6c757d;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.clickable-shortcut:hover .shortcut-hint {
+    opacity: 1;
 }
 
 .shortcut-keys {
@@ -847,3 +893,218 @@ body {
 }
 
 /* 🔧 优化：移除重复的 .status-message 定义，使用统一的状态消息样式 */
+
+/* 标签页相关样式已移至 window-manager.css，避免重复 */
+
+/* 功能说明样式 */
+.feature-description {
+    margin-bottom: 16px;
+}
+
+.feature-description p {
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-left: 3px solid #667eea;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.feature-description strong {
+    color: #495057;
+    font-weight: 600;
+}
+
+.help-tip {
+    padding: 12px;
+    background: #e7f3ff;
+    border: 1px solid #b3d9ff;
+    border-radius: 6px;
+    color: #0066cc;
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: center;
+}
+
+/* ==================== 平台配置样式（新增） ==================== */
+
+.platform-list-container,
+.custom-platforms-container,
+.direction-config-container {
+    margin-bottom: 20px;
+}
+
+.subsection-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin: 12px 0 8px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+/* 平台列表 */
+.platforms-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.platform-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.platform-item:hover {
+    background: #f0f1f3;
+    border-color: #667eea;
+}
+
+.platform-item-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.platform-item-name {
+    font-weight: 500;
+    color: #333;
+}
+
+.platform-item-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.platform-item-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #e0e0e0;
+    color: #333;
+}
+
+.platform-item-btn:hover {
+    background: #667eea;
+    color: white;
+}
+
+/* 方向配置 */
+.direction-item {
+    margin-bottom: 16px;
+}
+
+.direction-label {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.platform-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    min-height: 40px;
+}
+
+.platform-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: #667eea;
+    color: white;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.platform-tag-remove {
+    cursor: pointer;
+    font-weight: bold;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.platform-tag-remove:hover {
+    opacity: 1;
+}
+
+.platform-selector-empty {
+    color: #999;
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* 添加按钮 */
+#addCustomPlatformBtn {
+    width: 100%;
+    padding: 10px;
+    margin-top: 8px;
+}
+
+/* 深色模式 */
+@media (prefers-color-scheme: dark) {
+    .subsection-title {
+        color: #e0e0e0;
+        border-bottom-color: #444;
+    }
+
+    .platform-item {
+        background: #3d3d3d;
+        border-color: #444;
+        color: #e0e0e0;
+    }
+
+    .platform-item:hover {
+        background: #454545;
+        border-color: #667eea;
+    }
+
+    .platform-item-name {
+        color: #e0e0e0;
+    }
+
+    .platform-item-btn {
+        background: #555;
+        color: #e0e0e0;
+    }
+
+    .platform-item-btn:hover {
+        background: #667eea;
+        color: white;
+    }
+
+    .direction-label {
+        color: #e0e0e0;
+    }
+
+    .platform-selector {
+        background: #3d3d3d;
+        border-color: #444;
+    }
+
+    .platform-selector-empty {
+        color: #999;
+    }
+}

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>窗口管理器 - MomentTabManager</title>
+    <link rel="stylesheet" href="css/window-manager.css">
+</head>
+<body>
+    <div class="window-manager-container">
+        <!-- 主要内容区域 -->
+        <main class="window-manager-main">
+            <!-- 左侧：画布区域 -->
+            <div class="windows-container" id="windowsContainer">
+                <!-- 画布容器 -->
+                <div class="canvas-container" id="canvasContainer">
+                    <!-- 网格辅助层 -->
+                    <div class="grid-overlay" id="gridOverlay">
+                        <!-- 网格线将通过CSS生成 -->
+                    </div>
+
+                    <!-- 窗口层 -->
+                    <div class="windows-layer" id="windowsLayer">
+                        <!-- 动态生成的窗口将在这里显示 -->
+                    </div>
+
+                    <!-- 空状态提示 -->
+                    <div class="empty-state" id="emptyState">
+                        <div class="empty-icon">🎨</div>
+                        <h3>拖拽右侧标签页到画布区域创建窗口</h3>
+                        <div class="canvas-tips">
+                            <div class="tip-item">💡 支持拖拽调整窗口大小和位置</div>
+                            <div class="tip-item">🎯 所有窗口自动对齐到6×4网格系统</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 侧边栏触发按钮 -->
+            <div class="sidebar-trigger" id="sidebarTrigger">
+                <span class="trigger-icon">⚙️</span>
+            </div>
+
+            <!-- 右侧：可收缩侧边栏 -->
+            <aside class="control-panel" id="controlPanel">
+                <!-- 标签页管理 -->
+                <section class="control-section">
+                    <div class="section-header">
+                        <h3 class="section-title">标签页管理</h3>
+
+                        <!-- 固定在顶部的操作按钮 -->
+                        <div class="control-actions">
+                            <button class="btn-secondary" id="refreshTabsBtn">
+                                <span class="btn-icon">🔄</span>
+                                刷新列表
+                            </button>
+                            <button class="btn-secondary" id="clearAllBtn">
+                                <span class="btn-icon">🗑️</span>
+                                清空所有
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 填充剩余空间的标签页列表 -->
+                    <div class="tabs-list-container">
+                        <div id="tabsList" class="tabs-list">
+                            <div class="loading-message">加载中...</div>
+                        </div>
+                    </div>
+                </section>
+            </aside>
+        </main>
+
+        <!-- 状态提示 -->
+        <div id="statusMessage" class="status-message hidden"></div>
+    </div>
+
+    <!-- 脚本 -->
+    <script src="js/utils.js"></script>
+    <!-- interact.js 拖拽库 -->
+    <script src="js/interact.min.js"></script>
+    <script src="js/window-manager.js"></script>
+</body>
+</html>

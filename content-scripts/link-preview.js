@@ -2529,24 +2529,59 @@ class LinkWindowPreviewManager {
             return;
         }
 
-        // 根据方向获取对应的动作
-        const action = textDragManager.config.directions[direction];
-        if (!action || !TextDragUtils.shouldExecuteAction(action)) {
-            console.log(`⚠️ 方向 ${direction} 未配置有效动作`);
+        // 根据方向获取对应的配置
+        const directionConfig = textDragManager.config.directions[direction];
+        if (!directionConfig) {
+            console.log(`⚠️ 方向 ${direction} 未配置`);
             return;
         }
 
-        console.log(`🚀 iframe文字拖拽执行动作: ${action} (方向: ${direction})`);
-
         try {
-            // 🔧 优化：复用主页面的URL构建逻辑
-            const result = textDragManager.buildActionUrl(action, text);
-            if (!result) {
-                console.warn(`⚠️ 无法构建${action}动作的URL`);
+            let result = null;
+            let action = null;
+
+            // 🔧 优化：复用主页面的逻辑，支持新格式（数组）和旧格式（字符串）
+            if (Array.isArray(directionConfig) && directionConfig.length > 0) {
+                // 新格式：使用第一个平台作为默认操作
+                const platformId = directionConfig[0];
+                const platform = TextDragUtils.getPlatformById(platformId, textDragManager.platformConfig?.customPlatforms);
+
+                if (platform && platform.url) {
+                    // 替换 {query} 占位符
+                    const url = platform.url.replace('{query}', encodeURIComponent(text));
+                    result = {
+                        url: url,
+                        title: `${platform.name}: ${text.substring(0, 50)}`
+                    };
+                    action = 'platform';
+                    console.log(`🚀 iframe文字拖拽执行平台操作: ${platform.name} (方向: ${direction})`);
+                } else {
+                    console.warn(`⚠️ 平台 ${platformId} 配置无效`);
+                    return;
+                }
+            } else if (typeof directionConfig === 'string') {
+                // 旧格式：字符串类型的动作
+                action = directionConfig;
+
+                if (!TextDragUtils.shouldExecuteAction(action)) {
+                    console.log(`⚠️ 方向 ${direction} 未配置有效动作`);
+                    return;
+                }
+
+                console.log(`🚀 iframe文字拖拽执行动作: ${action} (方向: ${direction})`);
+
+                // 🔧 优化：复用主页面的URL构建逻辑
+                result = textDragManager.buildActionUrl(action, text);
+                if (!result) {
+                    console.warn(`⚠️ 无法构建${action}动作的URL`);
+                    return;
+                }
+            } else {
+                console.log(`⚠️ 方向 ${direction} 配置格式无效`);
                 return;
             }
 
-            // 🔧 优化：简化事件对象创建
+            // 创建模拟的触发事件
             const simulatedTriggerEvent = {
                 clientX: position.x || 0,
                 clientY: position.y || 0,
@@ -2554,6 +2589,7 @@ class LinkWindowPreviewManager {
                 textAction: { action, text, direction, title: result.title }
             };
 
+            // 🔧 优化：直接创建嵌套预览，避免额外的事件分发
             this.createNestedPreview(result.url, simulatedTriggerEvent, parentWindowId);
             console.log('✅ iframe文字拖拽预览窗口已创建:', result.title);
         } catch (error) {

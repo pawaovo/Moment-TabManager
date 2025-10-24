@@ -29,6 +29,10 @@
                 <span class="tab-icon">🔗</span>
                 链接弹窗
             </button>
+            <button class="tab-button" data-tab="window-manager">
+                <span class="tab-icon">🪟</span>
+                窗口管理
+            </button>
         </nav>
 
         <!-- 主要内容区域 -->
@@ -74,9 +78,9 @@
                     <div class="setting-item">
                         <label class="setting-label">分组快捷键</label>
                         <div class="shortcut-input-wrapper" id="groupShortcutWrapper">
-                            <div class="shortcut-display" id="groupShortcutDisplay">
+                            <div class="shortcut-display clickable-shortcut" id="groupShortcutDisplay">
                                 <span class="shortcut-keys" id="groupShortcutText">Ctrl+M</span>
-                                <button class="shortcut-edit-btn" id="groupShortcutEditBtn">修改</button>
+                                <span class="shortcut-hint">点击修改</span>
                             </div>
                             <div class="shortcut-input-container" id="groupShortcutInputContainer" style="display: none;">
                                 <input type="text" class="shortcut-input" id="groupShortcutInput"
@@ -93,9 +97,9 @@
                     <div class="setting-item">
                         <label class="setting-label">去重快捷键</label>
                         <div class="shortcut-input-wrapper" id="dedupeShortcutWrapper">
-                            <div class="shortcut-display" id="dedupeShortcutDisplay">
+                            <div class="shortcut-display clickable-shortcut" id="dedupeShortcutDisplay">
                                 <span class="shortcut-keys" id="dedupeShortcutText">Ctrl+Shift+M</span>
-                                <button class="shortcut-edit-btn" id="dedupeShortcutEditBtn">修改</button>
+                                <span class="shortcut-hint">点击修改</span>
                             </div>
                             <div class="shortcut-input-container" id="dedupeShortcutInputContainer" style="display: none;">
                                 <input type="text" class="shortcut-input" id="dedupeShortcutInput"
@@ -112,9 +116,9 @@
                     <div class="setting-item">
                         <label class="setting-label">复制快捷键</label>
                         <div class="shortcut-input-wrapper" id="copyShortcutWrapper">
-                            <div class="shortcut-display" id="copyShortcutDisplay">
+                            <div class="shortcut-display clickable-shortcut" id="copyShortcutDisplay">
                                 <span class="shortcut-keys" id="copyShortcutText">Ctrl+K</span>
-                                <button class="shortcut-edit-btn" id="copyShortcutEditBtn">修改</button>
+                                <span class="shortcut-hint">点击修改</span>
                             </div>
                             <div class="shortcut-input-container" id="copyShortcutInputContainer" style="display: none;">
                                 <input type="text" class="shortcut-input" id="copyShortcutInput"
@@ -131,9 +135,9 @@
                     <div class="setting-item">
                         <label class="setting-label">取消分组快捷键</label>
                         <div class="shortcut-input-wrapper" id="ungroupShortcutWrapper">
-                            <div class="shortcut-display" id="ungroupShortcutDisplay">
+                            <div class="shortcut-display clickable-shortcut" id="ungroupShortcutDisplay">
                                 <span class="shortcut-keys" id="ungroupShortcutText">Ctrl+Shift+K</span>
-                                <button class="shortcut-edit-btn" id="ungroupShortcutEditBtn">修改</button>
+                                <span class="shortcut-hint">点击修改</span>
                             </div>
                             <div class="shortcut-input-container" id="ungroupShortcutInputContainer" style="display: none;">
                                 <input type="text" class="shortcut-input" id="ungroupShortcutInput"
@@ -312,10 +316,113 @@
                 </div>
             </section>
 
-            <!-- 操作按钮 -->
-            <section class="settings-actions">
-                <button id="resetSettings" class="btn btn-secondary">重置设置</button>
+            <!-- 平台配置面板（新增） -->
+            <section class="settings-section">
+                <h2>搜索平台配置</h2>
+
+                <!-- 平台列表 -->
+                <div class="platform-list-container">
+                    <h3 class="subsection-title">预设平台</h3>
+                    <div id="presetPlatformsList" class="platforms-list">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 自定义平台 -->
+                <div class="custom-platforms-container">
+                    <h3 class="subsection-title">自定义平台</h3>
+                    <div id="customPlatformsList" class="platforms-list">
+                        <!-- 动态生成 -->
+                    </div>
+                    <button id="addCustomPlatformBtn" class="btn btn-primary">+ 添加自定义平台</button>
+                </div>
+
+                <!-- 方向配置 -->
+                <div class="direction-config-container">
+                    <h3 class="subsection-title">方向配置</h3>
+
+                    <div class="direction-item">
+                        <label class="direction-label">向上拖拽 ⬆️</label>
+                        <div id="directionUp" class="platform-selector" data-direction="up">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
+
+                    <div class="direction-item">
+                        <label class="direction-label">向下拖拽 ⬇️</label>
+                        <div id="directionDown" class="platform-selector" data-direction="down">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
+
+                    <div class="direction-item">
+                        <label class="direction-label">向左拖拽 ⬅️</label>
+                        <div id="directionLeft" class="platform-selector" data-direction="left">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
+
+                    <div class="direction-item">
+                        <label class="direction-label">向右拖拽 ➡️</label>
+                        <div id="directionRight" class="platform-selector" data-direction="right">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
+                </div>
             </section>
+
+            </div>
+
+            <!-- 窗口管理面板 -->
+            <div id="window-manager" class="tab-content">
+                <!-- 窗口管理快速操作 -->
+                <div class="quick-actions">
+                    <h3 class="section-title">窗口管理</h3>
+
+                    <button class="btn-action" id="openWindowManagerBtn">
+                        <span class="btn-icon">🪟</span>
+                        <span class="btn-text">打开窗口管理器</span>
+                        <span class="btn-shortcut">Ctrl+Shift+Q</span>
+                    </button>
+                </div>
+
+                <!-- 窗口管理器快捷键设置 -->
+                <div class="settings-section">
+                    <h3 class="section-title">快捷键设置</h3>
+
+                    <!-- 窗口管理器快捷键 -->
+                    <div class="setting-item">
+                        <label class="setting-label">窗口管理器快捷键</label>
+                        <div class="shortcut-input-wrapper" id="windowManagerShortcutWrapper">
+                            <div class="shortcut-display clickable-shortcut" id="windowManagerShortcutDisplay">
+                                <span class="shortcut-keys" id="windowManagerShortcutText">Ctrl+Shift+Q</span>
+                                <span class="shortcut-hint">点击修改</span>
+                            </div>
+                            <div class="shortcut-input-container" id="windowManagerShortcutInputContainer" style="display: none;">
+                                <input type="text" class="shortcut-input" id="windowManagerShortcutInput"
+                                       placeholder="按下你想要的快捷键组合..." readonly>
+                                <div class="shortcut-actions">
+                                    <button class="shortcut-save-btn" id="windowManagerShortcutSaveBtn" disabled>保存</button>
+                                    <button class="shortcut-cancel-btn" id="windowManagerShortcutCancelBtn">取消</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 功能说明 -->
+                <div class="settings-section">
+                    <h3 class="section-title">功能说明</h3>
+                    <div class="feature-description">
+                        <p>🪟 <strong>多窗口展示</strong>：在一个页面中同时查看多个网页内容</p>
+                        <p>🎛️ <strong>自定义布局</strong>：支持多行多窗口的灵活布局</p>
+                        <p>🔄 <strong>实时同步</strong>：直接操作真实的浏览器标签页内容</p>
+                    </div>
+
+                    <div class="help-tip">
+                        💡 点击上方按钮打开独立的窗口管理器页面，享受完整功能体验
+                    </div>
+                </div>
             </div>
         </main>
 

@@ -13,7 +13,8 @@
     "activeTab",
     "scripting",
     "clipboardWrite",
-    "sidePanel"
+    "sidePanel",
+    "declarativeNetRequest"
   ],
   
   "host_permissions": [
@@ -30,6 +31,7 @@
       "js": [
         "content-scripts/global-shortcuts.js",
         "content-scripts/text-drag-config.js",
+        "content-scripts/platform-list-manager.js",
         "content-scripts/link-preview.js"
       ],
       "css": ["css/link-preview.css"],
@@ -59,5 +61,17 @@
 
   "side_panel": {
     "default_path": "sidepanel.html"
+  },
+
+
+
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "iframe_headers",
+        "enabled": true,
+        "path": "rules/iframe-rules.json"
+      }
+    ]
   }
 }

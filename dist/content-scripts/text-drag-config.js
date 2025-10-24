@@ -59,7 +59,67 @@ const TEXT_DRAG_CONFIG = {
     },
 
     // 支持的动作类型
-    SUPPORTED_ACTIONS: ['search', 'translate', 'none']
+    SUPPORTED_ACTIONS: ['search', 'translate', 'none'],
+
+    // 预设平台配置（新增）
+    PRESET_PLATFORMS: {
+        google: {
+            id: 'google',
+            name: 'Google',
+            url: 'https://www.google.com/search?q={query}',
+            icon: null,
+            category: 'preset',
+            enabled: true
+        },
+        baidu: {
+            id: 'baidu',
+            name: '百度',
+            url: 'https://www.baidu.com/s?wd={query}',
+            icon: null,
+            category: 'preset',
+            enabled: true
+        },
+        bing: {
+            id: 'bing',
+            name: 'Bing',
+            url: 'https://www.bing.com/search?q={query}',
+            icon: null,
+            category: 'preset',
+            enabled: true
+        },
+        deepseek: {
+            id: 'deepseek',
+            name: 'DeepSeek',
+            url: 'https://www.deepseek.com/search?q={query}',
+            icon: null,
+            category: 'preset',
+            enabled: true
+        },
+        wikipedia: {
+            id: 'wikipedia',
+            name: 'Wikipedia',
+            url: 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={query}&format=json',
+            icon: null,
+            category: 'preset',
+            enabled: true
+        },
+        'baidu-translate': {
+            id: 'baidu-translate',
+            name: '百度翻译',
+            url: 'https://fanyi.baidu.com/#auto/zh/{query}',
+            icon: null,
+            category: 'preset',
+            enabled: true
+        },
+        'google-translate': {
+            id: 'google-translate',
+            name: 'Google翻译',
+            url: 'https://translate.google.com/?sl=auto&tl=zh-CN&text={query}&op=translate',
+            icon: null,
+            category: 'preset',
+            enabled: true
+        }
+    }
 };
 
 /**
@@ -195,6 +255,49 @@ class TextDragUtils {
     static shouldExecuteAction(action) {
         return action && action !== 'none' && TEXT_DRAG_CONFIG.SUPPORTED_ACTIONS.includes(action);
     }
+
+    /**
+     * 根据ID获取平台信息（新增）
+     * @param {string} id - 平台ID
+     * @param {Object} customPlatforms - 自定义平台配置
+     * @returns {Object|null} 平台对象或null
+     */
+    static getPlatformById(id, customPlatforms = {}) {
+        // 优先从自定义平台查找
+        if (customPlatforms[id]) {
+            return customPlatforms[id];
+        }
+
+        // 再从预设平台查找
+        if (TEXT_DRAG_CONFIG.PRESET_PLATFORMS && TEXT_DRAG_CONFIG.PRESET_PLATFORMS[id]) {
+            return TEXT_DRAG_CONFIG.PRESET_PLATFORMS[id];
+        }
+
+        return null;
+    }
+
+    /**
+     * 验证平台URL格式（新增）
+     * @param {string} url - 平台URL
+     * @returns {boolean} URL是否有效
+     */
+    static validatePlatformUrl(url) {
+        try {
+            // 检查是否包含 {query} 占位符
+            if (!url.includes('{query}')) {
+                return false;
+            }
+
+            // 检查是否是有效的 URL
+            const testUrl = url.replace('{query}', 'test');
+            new URL(testUrl);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+
 }
 
 // 导出配置和工具类
@@ -211,5 +314,9 @@ if (typeof module !== 'undefined' && module.exports) {
     }
     if (typeof window.TextDragUtils === 'undefined') {
         window.TextDragUtils = TextDragUtils;
+    }
+    // 暴露预设平台配置
+    if (typeof window.PRESET_PLATFORMS === 'undefined') {
+        window.PRESET_PLATFORMS = TEXT_DRAG_CONFIG.PRESET_PLATFORMS;
     }
 }

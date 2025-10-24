@@ -459,4 +459,100 @@
 /* 🎯 修复：移除文本拖拽特殊样式，确保与链接弹窗完全一致 */
 /* 文本拖拽弹窗现在使用与链接弹窗相同的样式和配置 */
 
+/* ==================== 平台列表样式（新增） ==================== */
+
+/* 平台列表容器 */
+.moment-platform-list {
+    position: fixed;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 999999;
+    min-width: 150px;
+    max-width: 250px;
+
+    /* 性能优化 */
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+
+    /* 动画 */
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.moment-platform-list.visible {
+    opacity: 1;
+}
+
+/* 平台项目 */
+.moment-platform-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    border-bottom: 1px solid #f0f0f0;
+    user-select: none;
+}
+
+.moment-platform-item:last-child {
+    border-bottom: none;
+}
+
+.moment-platform-item:hover {
+    background-color: #f5f5f5;
+}
+
+.moment-platform-item.highlighted {
+    background-color: #e3f2fd;
+    color: #1976d2;
+}
+
+/* 平台图标 */
+.moment-platform-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    border-radius: 2px;
+    object-fit: contain;
+}
+
+/* 平台名称 */
+.moment-platform-name {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+
+/* 深色模式 */
+@media (prefers-color-scheme: dark) {
+    .moment-platform-list {
+        background: #2d2d2d;
+        border-color: #444;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .moment-platform-item {
+        border-bottom-color: #3d3d3d;
+    }
+
+    .moment-platform-item:hover {
+        background-color: #3d3d3d;
+    }
+
+    .moment-platform-item.highlighted {
+        background-color: #1a3a52;
+        color: #64b5f6;
+    }
+
+    .moment-platform-name {
+        color: #e0e0e0;
+    }
+}
+
 /* ==================== CSS优化完成 ==================== */
