@@ -58,6 +58,8 @@ class UnifiedSidepanel {
     }
 
     getDefaultLinkWindowSettings() {
+        // 注意：预设平台配置在 background.js 中定义，通过 chrome.storage.local 获取
+        // 这里只返回默认的链接窗口设置结构
         return {
             linkPreview: {
                 enabled: true,
@@ -75,15 +77,22 @@ class UnifiedSidepanel {
                 },
                 textActions: {
                     enabled: true,
+                    presetPlatforms: {},  // 从 background.js 初始化时填充
+                    customPlatforms: {},
                     directions: {
-                        up: 'search',
-                        down: 'translate',
-                        left: 'search',
-                        right: 'search'
+                        up: ['google', 'deepseek'],
+                        down: ['baidu-translate'],
+                        left: ['google'],
+                        right: ['baidu']
                     },
                     searchEngine: 'baidu',
                     translateEngine: 'baidu',
-                    targetLanguage: 'zh'
+                    targetLanguage: 'zh',
+                    listPosition: 'auto',
+                    listStyle: 'vertical',
+                    showIcons: true,
+                    animationEnabled: true,
+                    maxItemsPerDirection: 10
                 }
             }
         };
@@ -445,6 +454,11 @@ class UnifiedSidepanel {
             triggerMethod.value = this.linkWindowSettings.linkPreview.trigger.method;
         }
 
+        // 新增：更新平台配置UI
+        this.renderPresetPlatforms();
+        this.renderCustomPlatforms();
+        this.renderDirectionConfig();
+
         // 更新其他设置...
         // 这里可以添加更多LinkWindow设置的UI更新逻辑
     }
@@ -486,13 +500,8 @@ class UnifiedSidepanel {
         // 其他选择器
         this.bindSelectEvents();
 
-        // 操作按钮
-        const resetBtn = document.getElementById('resetSettings');
-        if (resetBtn) {
-            resetBtn.addEventListener('click', () => {
-                this.resetSettings();
-            });
-        }
+        // 新增：初始化平台配置UI
+        this.initPlatformConfigUI();
 
         // 快捷键模态框事件已在 bindEvents 中统一绑定
     }
@@ -905,14 +914,7 @@ class UnifiedSidepanel {
         }
     }
 
-    async resetSettings() {
-        if (confirm('确定要重置所有设置吗？此操作不可撤销。')) {
-            this.linkWindowSettings = this.getDefaultLinkWindowSettings();
-            this.updateUI();
-            await this.saveSettings();
-            this.showStatusMessage('设置已重置', 'success');
-        }
-    }
+
 
     async saveSettings() {
         try {
@@ -1051,6 +1053,217 @@ class UnifiedSidepanel {
             this.showStatusMessage('保存失败', 'error');
             return false;
         }
+    }
+
+    // ===== 平台配置管理方法（新增） =====
+
+    initPlatformConfigUI() {
+        // 加载预设平台列表
+        this.renderPresetPlatforms();
+
+        // 加载自定义平台列表
+        this.renderCustomPlatforms();
+
+        // 加载方向配置
+        this.renderDirectionConfig();
+
+        // 绑定事件
+        const addBtn = document.getElementById('addCustomPlatformBtn');
+        if (addBtn) {
+            addBtn.addEventListener('click', () => this.showAddPlatformDialog());
+        }
+    }
+
+    renderPresetPlatforms() {
+        const container = document.getElementById('presetPlatformsList');
+        if (!container) return;
+
+        const presetPlatforms = this.linkWindowSettings?.linkPreview?.textActions?.presetPlatforms || {};
+        container.innerHTML = '';
+
+        Object.values(presetPlatforms).forEach(platform => {
+            const item = this.createPlatformItem(platform, false);
+            container.appendChild(item);
+        });
+    }
+
+    renderCustomPlatforms() {
+        const container = document.getElementById('customPlatformsList');
+        if (!container) return;
+
+        const customPlatforms = this.linkWindowSettings?.linkPreview?.textActions?.customPlatforms || {};
+        container.innerHTML = '';
+
+        Object.values(customPlatforms).forEach(platform => {
+            const item = this.createPlatformItem(platform, true);
+            container.appendChild(item);
+        });
+    }
+
+    createPlatformItem(platform, isCustom) {
+        const item = document.createElement('div');
+        item.className = 'platform-item';
+        item.dataset.platformId = platform.id;
+
+        const info = document.createElement('div');
+        info.className = 'platform-item-info';
+
+        const name = document.createElement('span');
+        name.className = 'platform-item-name';
+        name.textContent = platform.name;
+        info.appendChild(name);
+
+        const actions = document.createElement('div');
+        actions.className = 'platform-item-actions';
+
+        if (isCustom) {
+            const editBtn = document.createElement('button');
+            editBtn.className = 'platform-item-btn';
+            editBtn.textContent = '编辑';
+            editBtn.addEventListener('click', () => this.showEditPlatformDialog(platform));
+            actions.appendChild(editBtn);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'platform-item-btn';
+            deleteBtn.textContent = '删除';
+            deleteBtn.addEventListener('click', () => this.deletePlatform(platform.id));
+            actions.appendChild(deleteBtn);
+        }
+
+        item.appendChild(info);
+        item.appendChild(actions);
+        return item;
+    }
+
+    renderDirectionConfig() {
+        const directions = ['up', 'down', 'left', 'right'];
+        const directionConfig = this.linkWindowSettings?.linkPreview?.textActions?.directions || {};
+        const allPlatforms = {
+            ...this.linkWindowSettings?.linkPreview?.textActions?.presetPlatforms,
+            ...this.linkWindowSettings?.linkPreview?.textActions?.customPlatforms
+        };
+
+        directions.forEach(direction => {
+            const container = document.getElementById(`direction${direction.charAt(0).toUpperCase() + direction.slice(1)}`);
+            if (!container) return;
+
+            container.innerHTML = '';
+            const platformIds = directionConfig[direction] || [];
+
+            if (platformIds.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'platform-selector-empty';
+                empty.textContent = '未配置平台';
+                container.appendChild(empty);
+            } else {
+                platformIds.forEach(id => {
+                    const platform = allPlatforms[id];
+                    if (platform) {
+                        const tag = this.createPlatformTag(platform, direction);
+                        container.appendChild(tag);
+                    }
+                });
+            }
+
+            // 添加平台选择器
+            const selector = this.createPlatformSelector(direction, allPlatforms);
+            container.appendChild(selector);
+        });
+    }
+
+    createPlatformTag(platform, direction) {
+        const tag = document.createElement('div');
+        tag.className = 'platform-tag';
+        tag.dataset.platformId = platform.id;
+
+        const name = document.createElement('span');
+        name.textContent = platform.name;
+        tag.appendChild(name);
+
+        const remove = document.createElement('span');
+        remove.className = 'platform-tag-remove';
+        remove.textContent = '×';
+        remove.addEventListener('click', () => this.removePlatformFromDirection(platform.id, direction));
+        tag.appendChild(remove);
+
+        return tag;
+    }
+
+    createPlatformSelector(direction, allPlatforms) {
+        const selector = document.createElement('select');
+        selector.className = 'platform-selector-dropdown';
+        selector.style.marginTop = '8px';
+        selector.style.width = '100%';
+        selector.style.padding = '6px';
+
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '+ 添加平台';
+        selector.appendChild(option);
+
+        Object.values(allPlatforms).forEach(platform => {
+            const opt = document.createElement('option');
+            opt.value = platform.id;
+            opt.textContent = platform.name;
+            selector.appendChild(opt);
+        });
+
+        selector.addEventListener('change', (e) => {
+            if (e.target.value) {
+                this.addPlatformToDirection(e.target.value, direction);
+                e.target.value = '';
+            }
+        });
+
+        return selector;
+    }
+
+    async addPlatformToDirection(platformId, direction) {
+        const config = this.linkWindowSettings.linkPreview.textActions;
+        if (!config.directions[direction]) {
+            config.directions[direction] = [];
+        }
+        if (!config.directions[direction].includes(platformId)) {
+            config.directions[direction].push(platformId);
+            await this.saveLinkWindowSettings();
+            this.renderDirectionConfig();
+        }
+    }
+
+    async removePlatformFromDirection(platformId, direction) {
+        const config = this.linkWindowSettings.linkPreview.textActions;
+        if (config.directions[direction]) {
+            config.directions[direction] = config.directions[direction].filter(id => id !== platformId);
+            await this.saveLinkWindowSettings();
+            this.renderDirectionConfig();
+        }
+    }
+
+    async deletePlatform(platformId) {
+        if (!confirm('确定要删除此平台吗？')) return;
+
+        const config = this.linkWindowSettings.linkPreview.textActions;
+        delete config.customPlatforms[platformId];
+
+        // 从所有方向中移除此平台
+        Object.keys(config.directions).forEach(direction => {
+            config.directions[direction] = config.directions[direction].filter(id => id !== platformId);
+        });
+
+        await this.saveLinkWindowSettings();
+        this.renderCustomPlatforms();
+        this.renderDirectionConfig();
+        this.showStatusMessage('平台已删除', 'success');
+    }
+
+    showAddPlatformDialog() {
+        // TODO: 实现添加平台对话框
+        this.showStatusMessage('功能开发中...', 'info');
+    }
+
+    showEditPlatformDialog(platform) {
+        // TODO: 实现编辑平台对话框
+        this.showStatusMessage('功能开发中...', 'info');
     }
 
     // ===== 通用方法 =====

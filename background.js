@@ -90,7 +90,120 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     }
 });
 
+// 配置迁移函数（新增）
+async function migrateConfigIfNeeded(settings) {
+    try {
+        const textActions = settings?.linkPreview?.textActions;
+        if (!textActions) return;
 
+        // 检查是否需要迁移（旧格式：directions.up = 'search'）
+        const needsMigration = Object.values(textActions.directions || {}).some(
+            val => typeof val === 'string'
+        );
+
+        if (needsMigration) {
+            console.log('🔄 检测到旧配置格式，开始迁移...');
+
+            // 迁移方向配置
+            const migratedDirections = {};
+            for (const [direction, action] of Object.entries(textActions.directions)) {
+                if (typeof action === 'string') {
+                    // 旧格式：'search' -> 新格式：['baidu']
+                    if (action === 'search') {
+                        migratedDirections[direction] = ['baidu'];
+                    } else if (action === 'translate') {
+                        migratedDirections[direction] = ['baidu-translate'];
+                    } else {
+                        migratedDirections[direction] = [];
+                    }
+                } else {
+                    // 已经是新格式
+                    migratedDirections[direction] = action;
+                }
+            }
+
+            // 更新配置
+            settings.linkPreview.textActions = {
+                ...textActions,
+                presetPlatforms: textActions.presetPlatforms || PRESET_PLATFORMS,
+                customPlatforms: textActions.customPlatforms || {},
+                directions: migratedDirections,
+                listPosition: textActions.listPosition || 'auto',
+                listStyle: textActions.listStyle || 'vertical',
+                showIcons: textActions.showIcons !== false,
+                animationEnabled: textActions.animationEnabled !== false,
+                maxItemsPerDirection: textActions.maxItemsPerDirection || 10
+            };
+
+            await chrome.storage.local.set({ linkWindowSettings: settings });
+            console.log('✅ 配置迁移完成');
+        }
+    } catch (error) {
+        console.error('❌ 配置迁移失败:', error);
+    }
+}
+
+
+
+// 预设平台配置（新增）
+const PRESET_PLATFORMS = {
+    google: {
+        id: 'google',
+        name: 'Google',
+        url: 'https://www.google.com/search?q={query}',
+        icon: null,
+        category: 'preset',
+        enabled: true
+    },
+    baidu: {
+        id: 'baidu',
+        name: '百度',
+        url: 'https://www.baidu.com/s?wd={query}',
+        icon: null,
+        category: 'preset',
+        enabled: true
+    },
+    bing: {
+        id: 'bing',
+        name: 'Bing',
+        url: 'https://www.bing.com/search?q={query}',
+        icon: null,
+        category: 'preset',
+        enabled: true
+    },
+    deepseek: {
+        id: 'deepseek',
+        name: 'DeepSeek',
+        url: 'https://www.deepseek.com/search?q={query}',
+        icon: null,
+        category: 'preset',
+        enabled: true
+    },
+    wikipedia: {
+        id: 'wikipedia',
+        name: 'Wikipedia',
+        url: 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={query}&format=json',
+        icon: null,
+        category: 'preset',
+        enabled: true
+    },
+    'baidu-translate': {
+        id: 'baidu-translate',
+        name: '百度翻译',
+        url: 'https://fanyi.baidu.com/#auto/zh/{query}',
+        icon: null,
+        category: 'preset',
+        enabled: true
+    },
+    'google-translate': {
+        id: 'google-translate',
+        name: 'Google翻译',
+        url: 'https://translate.google.com/?sl=auto&tl=zh-CN&text={query}&op=translate',
+        icon: null,
+        category: 'preset',
+        enabled: true
+    }
+};
 
 // 初始化默认设置
 async function initializeDefaultSettings() {
@@ -120,21 +233,36 @@ async function initializeDefaultSettings() {
                     },
                     textActions: {
                         enabled: true,
+                        // 新增：预设平台配置
+                        presetPlatforms: PRESET_PLATFORMS,
+                        // 新增：自定义平台配置
+                        customPlatforms: {},
+                        // 改造：方向配置支持多平台
                         directions: {
-                            up: 'search',
-                            down: 'translate',
-                            left: 'search',
-                            right: 'search'
+                            up: ['google', 'deepseek'],
+                            down: ['baidu-translate'],
+                            left: ['google'],
+                            right: ['baidu']
                         },
+                        // 新增：UI配置
+                        listPosition: 'auto',
+                        listStyle: 'vertical',
+                        showIcons: true,
+                        animationEnabled: true,
+                        maxItemsPerDirection: 10,
+                        // 保留原有配置用于向后兼容
                         searchEngine: 'baidu',
                         translateEngine: 'baidu',
                         targetLanguage: 'zh'
                     }
                 }
             };
-            
+
             await chrome.storage.local.set({ linkWindowSettings: defaultSettings });
             console.log('✅ 默认设置已初始化');
+        } else {
+            // 新增：配置迁移逻辑
+            await migrateConfigIfNeeded(result.linkWindowSettings);
         }
     } catch (error) {
         console.error('❌ 初始化设置失败:', error);
@@ -184,6 +312,26 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
     // 处理LinkWindow消息
     switch (request.type) {
+        case 'openUrl':
+            // 新增：处理打开URL请求
+            (async () => {
+                try {
+                    if (request.inNewTab) {
+                        await chrome.tabs.create({ url: request.url });
+                    } else {
+                        const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                        if (currentTab) {
+                            await chrome.tabs.update(currentTab.id, { url: request.url });
+                        }
+                    }
+                    sendResponse({ success: true });
+                } catch (error) {
+                    console.error('❌ 打开URL失败:', error);
+                    sendResponse({ success: false, error: error.message });
+                }
+            })();
+            return true;
+
         case 'getSettings':
             handleGetSettings(sendResponse);
             return true; // 保持消息通道开放
@@ -1085,29 +1233,8 @@ function createIframeListenerInjector() {
 
         // 🔧 优化：iframe文字拖拽功能初始化（简化实现，复用核心逻辑）
         function initializeIframeTextDragSupport(parentWindowId) {
-            // 🔧 优化：使用常量避免重复定义
-            const DRAG_THRESHOLD = 20;
-            const DRAG_TIMEOUT = 1000;
-
-            // 🔧 优化：简化工具函数，只保留必要的
-            const calculateDistance = (start, end) =>
-                Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
-
-            const calculateDirection = (start, end) => {
-                const deltaX = end.x - start.x;
-                const deltaY = end.y - start.y;
-                return Math.abs(deltaX) > Math.abs(deltaY)
-                    ? (deltaX > 0 ? 'right' : 'left')
-                    : (deltaY > 0 ? 'down' : 'up');
-            };
-
-            const isClickInSelection = (event, selection) => {
-                if (!selection || selection.rangeCount === 0) return false;
-                const range = selection.getRangeAt(0);
-                const rect = range.getBoundingClientRect();
-                return event.clientX >= rect.left && event.clientX <= rect.right &&
-                       event.clientY >= rect.top && event.clientY <= rect.bottom;
-            };
+            // 注意：使用 TEXT_DRAG_CONFIG 和 TextDragUtils 中的常量和工具函数
+            // 避免重复定义，保持代码一致性
 
             // 🔧 优化：简化的iframe文字拖拽状态管理
             let dragState = {
@@ -1128,78 +1255,13 @@ function createIframeListenerInjector() {
                 if (clearText) dragState.selectedText = '';
             };
 
-            const handleMouseDown = (e) => {
-                if (e.button !== 0) return;
+            // 注意：iframe 文本拖拽功能已通过 content-scripts/link-preview.js 中的
+            // LinkWindowTextDragManager 类实现，该类通过 chrome.scripting.executeScript 注入到 iframe 中
+            // 此处不需要重复实现，避免代码冗余和维护困难
 
-                const selection = window.getSelection();
-                if (!selection || selection.isCollapsed) return;
-
-                const selectedText = selection.toString().trim();
-                if (!selectedText || selectedText.length < 1) return;
-
-                if (!isClickInSelection(e, selection)) return;
-
-                // 初始化潜在拖拽状态
-                dragState.isPotentialDrag = true;
-                dragState.startPosition = { x: e.clientX, y: e.clientY };
-                dragState.selectedText = selectedText;
-                dragState.dragStartTime = Date.now();
-
-                e.preventDefault();
-                console.log('🔧 iframe准备文本拖拽:', selectedText.substring(0, 50));
-            };
-
-            const handleMouseMove = (e) => {
-                if (dragState.isPotentialDrag && !dragState.isDragging) {
-                    dragState.dragDistance = calculateDistance(dragState.startPosition, { x: e.clientX, y: e.clientY });
-                    if (dragState.dragDistance >= DRAG_THRESHOLD) {
-                        dragState.isDragging = true;
-                        dragState.isPotentialDrag = false;
-                        console.log('🔧 iframe开始真正拖拽，距离:', dragState.dragDistance.toFixed(0) + 'px');
-                    }
-                }
-
-                if (dragState.isDragging) {
-                    document.body.style.cursor = 'grabbing';
-                }
-            };
-
-            const handleMouseUp = (e) => {
-                if (dragState.isDragging) {
-                    const dragTime = Date.now() - dragState.dragStartTime;
-                    if (dragState.dragDistance >= DRAG_THRESHOLD && dragTime <= DRAG_TIMEOUT) {
-                        const direction = calculateDirection(dragState.startPosition, { x: e.clientX, y: e.clientY });
-                        executeTextDragAction(direction, dragState.selectedText);
-                    }
-                    resetDragState();
-                } else if (dragState.isPotentialDrag) {
-                    resetDragState(true);
-                    console.log('🔧 iframe仅点击，未拖拽，取消操作');
-                }
-            };
-
-            const executeTextDragAction = (direction, text) => {
-                console.log('🚀 iframe执行文字拖拽动作:', { direction, text: text.substring(0, 50) });
-
-                // 向父窗口发送文字拖拽消息
-                window.parent.postMessage({
-                    type: 'momentLinkWindowTextDrag',
-                    parentWindowId: parentWindowId,
-                    textDragData: {
-                        text: text,
-                        direction: direction,
-                        position: { x: 0, y: 0 } // 简化位置信息
-                    },
-                    timestamp: Date.now()
-                }, '*');
-            };
-
-            // 🔧 优化：绑定事件监听器
-            document.addEventListener('mousedown', handleMouseDown, true);
-            document.addEventListener('mousemove', handleMouseMove, true);
-            document.addEventListener('mouseup', handleMouseUp, true);
-
-            console.log('✅ iframe文字拖拽功能已启用');
+            // iframe 中的文本拖拽消息通过 postMessage 发送到主页面，
+            // 由 LinkWindowPreviewManager.bindIframeDragEvents() 处理
+            console.log('✅ iframe文字拖拽功能已通过 LinkWindowTextDragManager 启用');
         }
     };
 }

@@ -39,6 +39,12 @@ class LinkWindowLogger {
     static info(message, data = null) { this.log('info', message, data); }
     static window(message, data = null) { this.log('window', message, data); }
     static drag(message, data = null) { this.log('drag', message, data); }
+
+    // 性能监控方法
+    static perf(message, duration) {
+        const status = duration < 16.67 ? '✅' : duration < 33.33 ? '⚠️' : '❌';
+        console.log(`${status} [性能] ${message}: ${duration.toFixed(2)}ms`);
+    }
 }
 
 // 统一常量定义
@@ -239,6 +245,14 @@ class LinkWindowTextDragManager {
         this.lastMousePosition = { x: 0, y: 0 };
         this.dragDistance = 0; // 🔧 优化：缓存拖拽距离，避免重复计算
 
+        // 新增：平台列表相关状态
+        this.showPlatformList = false;
+        this.currentDirection = null;
+        this.selectedPlatformIndex = -1;
+        this.platformListRafId = null;
+        this.platformListManager = null;
+        this.platformConfig = null;
+
         this.init();
     }
 
@@ -260,6 +274,15 @@ class LinkWindowTextDragManager {
         } catch (error) {
             console.warn('⚠️ 加载文本拖拽配置失败，使用默认配置:', error);
         }
+
+        // 初始化平台配置（确保总是有值）
+        this.platformConfig = {
+            presetPlatforms: this.config.presetPlatforms || TEXT_DRAG_CONFIG.PRESET_PLATFORMS || {},
+            customPlatforms: this.config.customPlatforms || {},
+            directions: this.config.directions || {},
+            showIcons: this.config.showIcons !== false,
+            listPosition: this.config.listPosition || 'auto'
+        };
     }
 
     bindEvents() {
@@ -287,6 +310,8 @@ class LinkWindowTextDragManager {
     }
 
     handleMouseMove(e) {
+        const moveStartTime = performance.now();
+
         // 优化：始终更新鼠标位置，减少重复代码
         this.lastMousePosition = { x: e.clientX, y: e.clientY };
 
@@ -304,6 +329,22 @@ class LinkWindowTextDragManager {
         if (this.isDragging) {
             this.endPosition = this.lastMousePosition;
             document.body.style.cursor = 'grabbing';
+
+            // 新增：显示平台列表（使用 requestAnimationFrame 节流）
+            if (!this.platformListRafId) {
+                this.platformListRafId = requestAnimationFrame(() => {
+                    const updateStartTime = performance.now();
+                    this.updatePlatformListDisplay();
+                    const updateDuration = performance.now() - updateStartTime;
+                    LinkWindowLogger.perf('平台列表更新', updateDuration);
+                    this.platformListRafId = null;
+                });
+            }
+        }
+
+        const moveDuration = performance.now() - moveStartTime;
+        if (moveDuration > 5) {
+            LinkWindowLogger.perf('handleMouseMove', moveDuration);
         }
     }
 
@@ -312,9 +353,27 @@ class LinkWindowTextDragManager {
         if (this.isDragging) {
             // 验证拖拽条件并执行动作
             if (this.validateAndExecuteDrag()) {
-                const direction = TextDragUtils.calculateDirection(this.startPosition, this.endPosition);
-                this.executeAction(direction, this.selectedText);
+                // 确保方向已计算（可能 updatePlatformListDisplay 还未执行）
+                if (!this.currentDirection) {
+                    this.currentDirection = TextDragUtils.calculateDirection(this.startPosition, this.endPosition);
+                }
+
+                // 新增：检查是否选中了平台
+                const selectedPlatform = this.platformListManager?.getSelectedPlatform(
+                    e.clientX,
+                    e.clientY
+                );
+
+                if (selectedPlatform) {
+                    // 执行选中平台的操作
+                    this.executePlatformAction(selectedPlatform, this.selectedText);
+                } else {
+                    // 如果没有选中平台，执行默认操作（向后兼容）
+                    this.executeAction(this.currentDirection, this.selectedText);
+                }
             }
+            // 清理平台列表
+            this.platformListManager?.destroy();
             // 重置拖拽状态
             this.resetDragState();
         } else if (this.isPotentialDrag) {
@@ -339,6 +398,14 @@ class LinkWindowTextDragManager {
         this.dragDistance = 0;
         document.body.style.cursor = '';
 
+        // 新增：清理平台列表相关状态
+        if (this.platformListRafId) {
+            cancelAnimationFrame(this.platformListRafId);
+            this.platformListRafId = null;
+        }
+        this.currentDirection = null;
+        this.selectedPlatformIndex = -1;
+
         if (clearText) {
             this.selectedText = '';
         }
@@ -355,8 +422,89 @@ class LinkWindowTextDragManager {
         return true;
     }
 
+    // 新增：更新平台列表显示
+    updatePlatformListDisplay() {
+        if (!this.platformConfig) return;
+
+        // 计算当前拖拽方向
+        const direction = TextDragUtils.calculateDirection(this.startPosition, this.endPosition);
+
+        // 获取该方向的平台列表
+        const platformIds = this.platformConfig.directions[direction] || [];
+        if (platformIds.length === 0) {
+            // 如果没有配置平台，销毁列表
+            this.platformListManager?.destroy();
+            return;
+        }
+
+        // 获取平台对象
+        const platforms = platformIds
+            .map(id => TextDragUtils.getPlatformById(id, this.platformConfig.customPlatforms))
+            .filter(p => p !== null);
+
+        if (platforms.length === 0) {
+            this.platformListManager?.destroy();
+            return;
+        }
+
+        // 创建或更新平台列表
+        if (!this.platformListManager) {
+            this.platformListManager = new PlatformListManager(this.platformConfig);
+            this.platformListManager.createList(platforms, {
+                x: this.endPosition.x,
+                y: this.endPosition.y,
+                direction: direction
+            });
+        } else {
+            // 更新列表位置
+            this.platformListManager.updatePosition(this.endPosition.x, this.endPosition.y);
+        }
+
+        this.currentDirection = direction;
+    }
+
+    // 新增：执行平台操作（显示链接弹窗）
+    executePlatformAction(platform, text) {
+        if (!platform || !platform.url) {
+            LinkWindowLogger.drag('平台配置无效');
+            return;
+        }
+
+        try {
+            // 替换 {query} 占位符
+            const url = platform.url.replace('{query}', encodeURIComponent(text));
+
+            // 构建结果对象
+            const result = {
+                url: url,
+                title: `${platform.name}: ${text.substring(0, 50)}`
+            };
+
+            // 分发文本拖拽事件，触发链接弹窗显示
+            this.dispatchTextDragEvent(result, text, 'platform', this.currentDirection || 'up');
+
+            LinkWindowLogger.drag(`执行平台操作: ${platform.name}`, `URL: ${url}`);
+        } catch (error) {
+            console.error('❌ 执行平台操作失败:', error);
+        }
+    }
+
     executeAction(direction, text) {
-        const action = this.config.directions[direction];
+        const directionConfig = this.config.directions[direction];
+
+        // 新增：支持新的数组格式（向后兼容）
+        if (Array.isArray(directionConfig) && directionConfig.length > 0) {
+            // 新格式：使用第一个平台作为默认操作
+            const platformId = directionConfig[0];
+            const platform = TextDragUtils.getPlatformById(platformId, this.platformConfig?.customPlatforms);
+            if (platform) {
+                this.executePlatformAction(platform, text);
+                return;
+            }
+        }
+
+        // 旧格式：字符串类型的动作
+        const action = directionConfig;
 
         // 优化：提前返回，减少嵌套
         if (!TextDragUtils.shouldExecuteAction(action)) {

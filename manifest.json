@@ -31,6 +31,7 @@
       "js": [
         "content-scripts/global-shortcuts.js",
         "content-scripts/text-drag-config.js",
+        "content-scripts/platform-list-manager.js",
         "content-scripts/link-preview.js"
       ],
       "css": ["css/link-preview.css"],
