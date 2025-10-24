@@ -252,6 +252,50 @@ body {
     padding: 10px 12px;
 }
 
+.clickable-shortcut {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 6px;
+}
+
+.clickable-shortcut:hover {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+.shortcut-hint {
+    font-size: 12px;
+    color: #6c757d;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.clickable-shortcut:hover .shortcut-hint {
+    opacity: 1;
+}
+
+.clickable-shortcut {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 6px;
+}
+
+.clickable-shortcut:hover {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+.shortcut-hint {
+    font-size: 12px;
+    color: #6c757d;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.clickable-shortcut:hover .shortcut-hint {
+    opacity: 1;
+}
+
 .shortcut-keys {
     font-family: 'Courier New', monospace;
     font-size: 13px;

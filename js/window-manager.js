@@ -17,28 +17,58 @@ class WindowManager {
         console.log(`${prefix} WindowManager: ${message}`);
     }
     constructor() {
-        // 配置信息
-        this.config = {
-            rows: 1,                // 行数：1-4
-            firstRowCount: 2,       // 第一行窗口数：1-6
-            secondRowCount: 1,      // 第二行窗口数：1-6
-            thirdRowCount: 1,       // 第三行窗口数：1-6
-            fourthRowCount: 1       // 第四行窗口数：1-6
+        // 画布配置
+        this.canvasConfig = {
+            gridCols: 6,            // 网格列数
+            gridRows: 4,            // 网格行数
+            cellWidth: 0,           // 单元格宽度 (运行时计算)
+            cellHeight: 0,          // 单元格高度 (运行时计算)
+            windowGap: 4            // 窗口间隙 (像素)
         };
-        
-        // 窗口映射：windowIndex -> tabId
-        this.windows = new Map();
-        
+
+        // 窗口数组：存储所有窗口信息
+        this.windows = [];
+
+        // 标签页数据
+        this.availableTabs = [];
+        this.availableTabGroups = [];
+
         // 当前选中的标签页
         this.selectedTab = null;
-        
+
         // 当前选中的窗口
         this.selectedWindow = null;
-        
+
+        // 窗口ID计数器
+        this.windowIdCounter = 1;
+
         // 存储键名
-        this.STORAGE_KEY = 'window-manager-config';
-        
-        WindowManager.log('初始化');
+        this.STORAGE_KEY = 'window-manager-canvas-config';
+
+        // 操作状态管理
+        this.isOperating = false;
+        this.isResizing = false;
+
+        // 全局事件监听相关
+        this.globalMouseUpHandler = null;
+        this.globalMouseMoveHandler = null;
+        this.currentDragTarget = null;
+
+        WindowManager.log('初始化画布模式');
+    }
+
+    /**
+     * 性能优化：节流函数
+     */
+    throttle(func, limit) {
+        let inThrottle;
+        return function(...args) {
+            if (!inThrottle) {
+                func.apply(this, args);
+                inThrottle = true;
+                setTimeout(() => inThrottle = false, limit);
+            }
+        };
     }
 
     /**
@@ -68,6 +98,196 @@ class WindowManager {
             console.error('❌ 窗口管理器初始化失败:', error);
             this.showStatusMessage('初始化失败: ' + error.message, 'error');
         }
+    }
+
+    /**
+     * 创建新窗口
+     */
+    createWindow(x, y, width, height, tabs = []) {
+        const window = {
+            id: `window-${this.windowIdCounter++}`,
+            x: Math.max(0, Math.min(x, this.canvasConfig.gridCols - width)),
+            y: Math.max(0, Math.min(y, this.canvasConfig.gridRows - height)),
+            width: Math.max(1, Math.min(width, this.canvasConfig.gridCols)),
+            height: Math.max(1, Math.min(height, this.canvasConfig.gridRows)),
+            tabs: [...tabs],
+            created: Date.now()
+        };
+
+        // 检查位置是否可用
+        if (!this.isPositionAvailable(window.x, window.y, window.width, window.height)) {
+            // 寻找最近的可用位置
+            const newPosition = this.findNearestValidPosition(window.x, window.y, window.width, window.height);
+            if (newPosition) {
+                window.x = newPosition.x;
+                window.y = newPosition.y;
+            } else {
+                throw new Error('画布空间不足，无法创建窗口');
+            }
+        }
+
+        this.windows.push(window);
+        WindowManager.log(`创建窗口: ${window.id} at (${window.x},${window.y}) size ${window.width}×${window.height}`);
+        return window;
+    }
+
+    /**
+     * 更新窗口属性
+     */
+    updateWindow(id, properties) {
+        const window = this.windows.find(w => w.id === id);
+        if (!window) {
+            throw new Error(`窗口 ${id} 不存在`);
+        }
+
+        const oldWindow = { ...window };
+        Object.assign(window, properties);
+
+        // 验证新位置和尺寸
+        if (properties.x !== undefined || properties.y !== undefined ||
+            properties.width !== undefined || properties.height !== undefined) {
+
+            // 检查新位置是否可用（排除自己）
+            if (!this.isPositionAvailable(window.x, window.y, window.width, window.height, window.id)) {
+                // 恢复原始状态
+                Object.assign(window, oldWindow);
+                throw new Error('目标位置不可用');
+            }
+        }
+
+        WindowManager.log(`更新窗口: ${window.id}`);
+        return window;
+    }
+
+    /**
+     * 删除窗口
+     */
+    deleteWindow(id) {
+        const index = this.windows.findIndex(w => w.id === id);
+        if (index === -1) {
+            throw new Error(`窗口 ${id} 不存在`);
+        }
+
+        const window = this.windows.splice(index, 1)[0];
+        WindowManager.log(`删除窗口: ${window.id}`);
+        return window;
+    }
+
+    /**
+     * 移除窗口元素（不刷新整个画布）
+     */
+    removeWindowElement(id) {
+        try {
+            // 从数据中删除窗口
+            this.deleteWindow(id);
+
+            // 从DOM中移除窗口元素
+            const windowElement = document.querySelector(`[data-window-id="${id}"]`);
+            if (windowElement) {
+                windowElement.remove();
+                WindowManager.log(`窗口元素已移除: ${id}`);
+            }
+
+            // 保存配置
+            this.saveConfig();
+
+            // 显示状态消息
+            this.showStatusMessage(`已删除窗口: ${id}`, 'success');
+
+        } catch (error) {
+            console.error('❌ 删除窗口失败:', error);
+            this.showStatusMessage('删除窗口失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 查找指定位置的窗口
+     */
+    findWindowAt(x, y) {
+        return this.windows.find(window =>
+            x >= window.x && x < window.x + window.width &&
+            y >= window.y && y < window.y + window.height
+        );
+    }
+
+    /**
+     * 检查位置是否可用
+     */
+    isPositionAvailable(x, y, width, height, excludeWindowId = null) {
+        // 检查边界
+        if (x < 0 || y < 0 || x + width > this.canvasConfig.gridCols || y + height > this.canvasConfig.gridRows) {
+            return false;
+        }
+
+        // 检查与现有窗口的重叠
+        for (const window of this.windows) {
+            if (excludeWindowId && window.id === excludeWindowId) {
+                continue; // 跳过被排除的窗口
+            }
+
+            if (this.checkWindowCollision(
+                { x, y, width, height },
+                window
+            )) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * 检查两个窗口是否重叠
+     */
+    checkWindowCollision(window1, window2) {
+        return !(
+            window1.x + window1.width <= window2.x ||
+            window2.x + window2.width <= window1.x ||
+            window1.y + window1.height <= window2.y ||
+            window2.y + window2.height <= window1.y
+        );
+    }
+
+    /**
+     * 通用的位置搜索方法
+     */
+    findNearestValidPosition(targetX, targetY, width, height, excludeWindowId = null, startDistance = 0) {
+        const maxDistance = this.canvasConfig.gridCols + this.canvasConfig.gridRows;
+
+        for (let distance = startDistance; distance <= maxDistance; distance++) {
+            // 搜索以目标位置为中心的正方形区域
+            for (let dx = -distance; dx <= distance; dx++) {
+                for (let dy = -distance; dy <= distance; dy++) {
+                    // 只检查边界上的点
+                    if (Math.abs(dx) !== distance && Math.abs(dy) !== distance) continue;
+
+                    const x = targetX + dx;
+                    const y = targetY + dy;
+
+                    if (this.isPositionAvailable(x, y, width, height, excludeWindowId)) {
+                        return { x, y };
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 为调整大小操作寻找有效位置（优先保持原位置）
+     */
+    findValidPositionForResize(targetX, targetY, width, height, excludeWindowId) {
+        // 首先检查当前位置是否可用（排除自己）
+        if (this.isPositionAvailable(targetX, targetY, width, height, excludeWindowId)) {
+            return { x: targetX, y: targetY };
+        }
+
+        // 如果当前位置不可用，寻找最近的可用位置（从距离1开始）
+        const result = this.findNearestValidPosition(targetX, targetY, width, height, excludeWindowId, 1);
+
+        // 如果找不到可用位置，返回原位置（这种情况很少发生）
+        return result || { x: targetX, y: targetY };
     }
 
     /**
@@ -101,31 +321,9 @@ class WindowManager {
     bindEvents() {
         // 侧边栏控制事件
         this.bindSidebarEvents();
-        // 布局配置事件
-        document.getElementById('layoutRows')?.addEventListener('change', (e) => {
-            this.updateLayoutConfig('rows', parseInt(e.target.value));
-        });
 
-        document.getElementById('firstRowCount')?.addEventListener('change', (e) => {
-            this.updateLayoutConfig('firstRowCount', parseInt(e.target.value));
-        });
-
-        document.getElementById('secondRowCount')?.addEventListener('change', (e) => {
-            this.updateLayoutConfig('secondRowCount', parseInt(e.target.value));
-        });
-
-        document.getElementById('thirdRowCount')?.addEventListener('change', (e) => {
-            this.updateLayoutConfig('thirdRowCount', parseInt(e.target.value));
-        });
-
-        document.getElementById('fourthRowCount')?.addEventListener('change', (e) => {
-            this.updateLayoutConfig('fourthRowCount', parseInt(e.target.value));
-        });
-
-        // 应用布局按钮
-        document.getElementById('applyLayoutBtn')?.addEventListener('click', () => {
-            this.updateLayout();
-        });
+        // 画布相关事件
+        this.setupCanvas();
 
         // 刷新标签页列表
         document.getElementById('refreshTabsBtn')?.addEventListener('click', () => {
@@ -135,16 +333,6 @@ class WindowManager {
         // 清空所有窗口
         document.getElementById('clearAllBtn')?.addEventListener('click', () => {
             this.clearAllWindows();
-        });
-
-        // 添加到窗口
-        document.getElementById('addToWindowBtn')?.addEventListener('click', () => {
-            this.addTabToWindow();
-        });
-
-        // 清空窗口
-        document.getElementById('clearWindowBtn')?.addEventListener('click', () => {
-            this.clearSelectedWindow();
         });
 
         // 键盘快捷键
@@ -162,8 +350,20 @@ class WindowManager {
         try {
             const result = await StorageUtils.loadSettings(this.STORAGE_KEY);
             if (result) {
-                this.config = { ...this.config, ...result };
-                console.log('📋 配置已加载:', this.config);
+                // 检查是否是旧版本配置
+                if (result.rows !== undefined) {
+                    // 迁移旧配置到新结构
+                    this.windows = this.migrateOldConfig(result);
+                    console.log('📋 已迁移旧配置到画布模式');
+                } else if (result.windows) {
+                    // 加载新配置
+                    this.windows = result.windows || [];
+                    this.canvasConfig = { ...this.canvasConfig, ...result.canvasConfig };
+                    console.log('📋 画布配置已加载:', { windows: this.windows.length, canvasConfig: this.canvasConfig });
+                }
+
+                // 保存迁移后的配置
+                await this.saveConfig();
             }
         } catch (error) {
             console.error('❌ 加载配置失败:', error);
@@ -175,12 +375,56 @@ class WindowManager {
      */
     async saveConfig() {
         try {
-            await StorageUtils.saveSettings(this.config, this.STORAGE_KEY);
-            console.log('💾 配置已保存:', this.config);
+            const config = {
+                windows: this.windows,
+                canvasConfig: this.canvasConfig,
+                version: '2.0'
+            };
+            await StorageUtils.saveSettings(config, this.STORAGE_KEY);
+            console.log('💾 画布配置已保存:', config);
         } catch (error) {
             console.error('❌ 保存配置失败:', error);
             throw error;
         }
+    }
+
+    /**
+     * 迁移旧配置到新结构
+     */
+    migrateOldConfig(oldConfig) {
+        const windows = [];
+        let windowIndex = 0;
+        let currentY = 0;
+
+        // 根据旧配置创建窗口
+        const rowCounts = [oldConfig.firstRowCount || 2];
+        if (oldConfig.rows >= 2) rowCounts.push(oldConfig.secondRowCount || 1);
+        if (oldConfig.rows >= 3) rowCounts.push(oldConfig.thirdRowCount || 1);
+        if (oldConfig.rows >= 4) rowCounts.push(oldConfig.fourthRowCount || 1);
+
+        for (let row = 0; row < (oldConfig.rows || 1); row++) {
+            const windowsInRow = rowCounts[row] || 1;
+            const windowWidth = Math.floor(this.canvasConfig.gridCols / windowsInRow);
+            const windowHeight = Math.floor(this.canvasConfig.gridRows / (oldConfig.rows || 1));
+
+            for (let col = 0; col < windowsInRow; col++) {
+                windows.push({
+                    id: `migrated-window-${windowIndex++}`,
+                    x: col * windowWidth,
+                    y: currentY,
+                    width: windowWidth,
+                    height: windowHeight,
+                    tabs: [],
+                    created: Date.now(),
+                    migrated: true
+                });
+            }
+
+            currentY += windowHeight;
+        }
+
+        WindowManager.log(`迁移完成: 创建了 ${windows.length} 个窗口`);
+        return windows;
     }
 
     /**
@@ -224,45 +468,384 @@ class WindowManager {
     }
 
     /**
-     * 更新行数控制UI
+     * 设置画布
      */
-    updateRowControls() {
-        const rows = this.config.rows;
-        const secondRowContainer = document.getElementById('secondRowContainer');
-        const thirdRowContainer = document.getElementById('thirdRowContainer');
-        const fourthRowContainer = document.getElementById('fourthRowContainer');
+    setupCanvas() {
+        this.initializeCanvasDimensions();
+        this.setupGridOverlay();
+        this.setupGlobalEventListeners();
+        this.setupDropZone();
+        this.renderCanvas();
 
-        // 显示/隐藏行数控制
-        if (secondRowContainer) {
-            secondRowContainer.style.display = rows >= 2 ? 'block' : 'none';
-        }
-        if (thirdRowContainer) {
-            thirdRowContainer.style.display = rows >= 3 ? 'block' : 'none';
-        }
-        if (fourthRowContainer) {
-            fourthRowContainer.style.display = rows >= 4 ? 'block' : 'none';
+        // 监听窗口大小变化（使用防抖优化）
+        const debouncedResize = this.throttle(() => {
+            this.initializeCanvasDimensions();
+            // 重新定位所有窗口以适应新的画布尺寸
+            this.windows.forEach(window => {
+                const element = document.getElementById(window.id);
+                if (element) {
+                    this.positionWindow(element, window);
+                }
+            });
+        }, 250);
+
+        window.addEventListener('resize', debouncedResize);
+
+        // 页面卸载时清理资源
+        window.addEventListener('beforeunload', () => {
+            this.cleanup();
+        });
+
+        WindowManager.log('画布初始化完成');
+    }
+
+    /**
+     * 初始化画布尺寸
+     */
+    initializeCanvasDimensions() {
+        const canvasContainer = document.getElementById('canvasContainer');
+        if (!canvasContainer) return;
+
+        const rect = canvasContainer.getBoundingClientRect();
+        this.canvasConfig.cellWidth = rect.width / this.canvasConfig.gridCols;
+        this.canvasConfig.cellHeight = rect.height / this.canvasConfig.gridRows;
+
+        WindowManager.log(`画布尺寸: ${rect.width}×${rect.height}, 单元格: ${this.canvasConfig.cellWidth}×${this.canvasConfig.cellHeight}`);
+    }
+
+    /**
+     * 设置网格覆盖层
+     */
+    setupGridOverlay() {
+        const gridOverlay = document.getElementById('gridOverlay');
+        if (!gridOverlay) return;
+
+        // 清空现有网格
+        gridOverlay.innerHTML = '';
+
+        // 创建网格单元格
+        const totalCells = this.canvasConfig.gridCols * this.canvasConfig.gridRows;
+        for (let i = 0; i < totalCells; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            gridOverlay.appendChild(cell);
         }
 
-        // 更新选择器值
-        const layoutRows = document.getElementById('layoutRows');
-        const firstRowCount = document.getElementById('firstRowCount');
-        const secondRowCount = document.getElementById('secondRowCount');
-        const thirdRowCount = document.getElementById('thirdRowCount');
-        const fourthRowCount = document.getElementById('fourthRowCount');
+        WindowManager.log('网格覆盖层初始化完成');
+    }
 
-        if (layoutRows) layoutRows.value = this.config.rows.toString();
-        if (firstRowCount) firstRowCount.value = this.config.firstRowCount.toString();
-        if (secondRowCount) secondRowCount.value = this.config.secondRowCount.toString();
-        if (thirdRowCount) thirdRowCount.value = this.config.thirdRowCount.toString();
-        if (fourthRowCount) fourthRowCount.value = this.config.fourthRowCount.toString();
+    /**
+     * 设置全局事件监听（备用机制）
+     */
+    setupGlobalEventListeners() {
+        // 全局鼠标抬起事件，确保操作能正确结束
+        this.globalMouseUpHandler = (event) => {
+            if (this.isOperating || this.isResizing) {
+                WindowManager.log('全局鼠标抬起，强制结束操作');
+                this.forceEndOperation();
+            }
+        };
+
+        // 全局鼠标移动事件（备用）
+        this.globalMouseMoveHandler = (event) => {
+            if (this.currentDragTarget && (this.isOperating || this.isResizing)) {
+                event.preventDefault();
+            }
+        };
+
+        document.addEventListener('mouseup', this.globalMouseUpHandler, true);
+        document.addEventListener('mousemove', this.globalMouseMoveHandler, true);
+
+        WindowManager.log('全局事件监听器已设置');
+    }
+
+    /**
+     * 强制结束操作
+     */
+    forceEndOperation() {
+        if (this.currentDragTarget) {
+            // 使用统一的状态清理方法
+            this.clearOperationState(this.currentDragTarget);
+            this.hideGridOverlay();
+
+            // 恢复全局状态
+            document.body.classList.remove('dragging', 'resizing');
+            document.body.style.userSelect = '';
+            document.body.style.webkitUserSelect = '';
+
+            // 释放鼠标捕获
+            if (document.releaseCapture) {
+                document.releaseCapture();
+            }
+
+            this.currentDragTarget = null;
+        }
+
+        WindowManager.log('操作已强制结束');
+    }
+
+    /**
+     * 设置拖拽放置区域
+     */
+    setupDropZone() {
+        const canvasContainer = document.getElementById('canvasContainer');
+        if (!canvasContainer) return;
+
+        // 设置拖拽放置事件
+        canvasContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            this.showGridOverlay();
+        });
+
+        canvasContainer.addEventListener('dragleave', (e) => {
+            // 只有当离开整个容器时才隐藏网格
+            if (!canvasContainer.contains(e.relatedTarget)) {
+                this.hideGridOverlay();
+            }
+        });
+
+        canvasContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.hideGridOverlay();
+            this.handleCanvasDrop(e);
+        });
     }
 
     /**
      * 更新UI
      */
     updateUI() {
-        this.updateRowControls();
-        this.updateLayout();
+        this.renderCanvas();
+    }
+
+    /**
+     * 处理画布拖拽放置
+     */
+    handleCanvasDrop(event) {
+        try {
+            const dragDataText = event.dataTransfer.getData('text/plain');
+
+            // 检查是否有拖拽数据
+            if (!dragDataText || dragDataText.trim() === '') {
+                console.warn('⚠️ 没有拖拽数据');
+                return;
+            }
+
+            const dragData = JSON.parse(dragDataText);
+            const rect = document.getElementById('canvasContainer').getBoundingClientRect();
+
+            // 计算拖拽位置对应的网格坐标
+            const pixelX = event.clientX - rect.left;
+            const pixelY = event.clientY - rect.top;
+            const gridPos = this.pixelToGrid(pixelX, pixelY);
+
+            console.log('🎯 拖拽数据:', dragData, '位置:', gridPos);
+
+            if (dragData.type === 'tab') {
+                this.createWindowFromTab(dragData.tab, gridPos.x, gridPos.y);
+            } else if (dragData.type === 'tabGroup') {
+                this.createWindowFromTabGroup(dragData.tabs, gridPos.x, gridPos.y);
+            } else {
+                console.warn('⚠️ 未知的拖拽类型:', dragData.type);
+            }
+
+        } catch (error) {
+            console.error('❌ 处理拖拽放置失败:', error);
+            this.showStatusMessage('创建窗口失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 像素坐标转网格坐标
+     */
+    pixelToGrid(pixelX, pixelY) {
+        return {
+            x: Math.floor(pixelX / this.canvasConfig.cellWidth),
+            y: Math.floor(pixelY / this.canvasConfig.cellHeight)
+        };
+    }
+
+    /**
+     * 网格坐标转像素坐标
+     */
+    gridToPixel(gridX, gridY) {
+        return {
+            x: gridX * this.canvasConfig.cellWidth,
+            y: gridY * this.canvasConfig.cellHeight
+        };
+    }
+
+    /**
+     * 显示网格辅助
+     */
+    showGridOverlay() {
+        const gridOverlay = document.getElementById('gridOverlay');
+        if (gridOverlay && !gridOverlay.classList.contains('visible')) {
+            gridOverlay.classList.add('visible');
+            WindowManager.log('显示网格辅助');
+        }
+    }
+
+    /**
+     * 隐藏网格辅助
+     */
+    hideGridOverlay() {
+        // 只有在没有进行任何操作时才隐藏网格
+        if (!this.isOperating && !this.isResizing) {
+            const gridOverlay = document.getElementById('gridOverlay');
+            if (gridOverlay && gridOverlay.classList.contains('visible')) {
+                gridOverlay.classList.remove('visible');
+                WindowManager.log('隐藏网格辅助');
+            }
+        } else {
+            WindowManager.log('操作进行中，保持网格显示');
+        }
+    }
+
+    /**
+     * 从单个标签页创建窗口
+     */
+    createWindowFromTab(tab, x, y) {
+        // 单个标签页固定使用2×4尺寸
+        const window = this.createWindow(x, y, 2, 4, [tab]);
+        this.renderWindow(window);
+        this.saveConfig();
+
+        WindowManager.log(`从标签页创建窗口: ${tab.title}`);
+        this.showStatusMessage(`已创建窗口: ${tab.title}`, 'success');
+    }
+
+    /**
+     * 从标签页分组创建多个独立窗口
+     */
+    createWindowFromTabGroup(tabs, startX, startY) {
+        // 限制最多6个标签页
+        const limitedTabs = tabs.slice(0, 6);
+        const tabCount = limitedTabs.length;
+
+        // 根据标签页数量确定窗口尺寸
+        const windowSize = this.calculateSingleWindowSize(tabCount);
+
+        // 计算布局配置
+        const layoutConfig = this.calculateGroupLayout(tabCount, startX, startY, windowSize);
+
+        const createdWindows = [];
+
+        // 为每个标签页创建独立窗口
+        limitedTabs.forEach((tab, index) => {
+            const position = layoutConfig.positions[index];
+            const window = this.createWindow(
+                position.x,
+                position.y,
+                windowSize.width,
+                windowSize.height,
+                [tab] // 每个窗口只包含一个标签页
+            );
+            this.renderWindow(window);
+            createdWindows.push(window);
+        });
+
+        this.saveConfig();
+
+        WindowManager.log(`从分组创建${createdWindows.length}个独立窗口`);
+        this.showStatusMessage(`已创建${createdWindows.length}个窗口`, 'success');
+
+        return createdWindows;
+    }
+
+    /**
+     * 计算单个窗口尺寸（用于分组中的每个标签页）
+     */
+    calculateSingleWindowSize(totalTabsInGroup) {
+        if (totalTabsInGroup <= 3) {
+            return { width: 2, height: 4 }; // 2列×4行，8个单元格，1/3页面
+        } else {
+            return { width: 2, height: 2 }; // 2列×2行，4个单元格，1/6页面
+        }
+    }
+
+
+
+    /**
+     * 计算分组布局（为多个窗口计算位置）
+     */
+    calculateGroupLayout(tabCount, startX, startY, windowSize) {
+        const positions = [];
+        const { width: windowWidth, height: windowHeight } = windowSize;
+
+        if (tabCount <= 3) {
+            // ≤3个标签页：每个窗口2×4，水平排列
+            for (let i = 0; i < tabCount; i++) {
+                const x = startX + (i * windowWidth);
+                // 确保不超出画布边界
+                const finalX = Math.min(x, this.canvasConfig.gridCols - windowWidth);
+                const finalY = Math.min(startY, this.canvasConfig.gridRows - windowHeight);
+
+                positions.push({ x: finalX, y: finalY });
+            }
+        } else {
+            // 4-6个标签页：每个窗口2×2，网格排列
+            const cols = 3; // 每行最多3个窗口
+            for (let i = 0; i < tabCount; i++) {
+                const row = Math.floor(i / cols);
+                const col = i % cols;
+
+                const x = startX + (col * windowWidth);
+                const y = startY + (row * windowHeight);
+
+                // 确保不超出画布边界
+                const finalX = Math.min(x, this.canvasConfig.gridCols - windowWidth);
+                const finalY = Math.min(y, this.canvasConfig.gridRows - windowHeight);
+
+                positions.push({ x: finalX, y: finalY });
+            }
+        }
+
+        return { positions };
+    }
+
+    /**
+     * 渲染画布（优化版本）
+     */
+    renderCanvas() {
+        const windowsLayer = document.getElementById('windowsLayer');
+        const emptyState = document.getElementById('emptyState');
+
+        if (!windowsLayer || !emptyState) return;
+
+        // 使用 requestAnimationFrame 优化渲染
+        requestAnimationFrame(() => {
+            // 清空现有窗口
+            windowsLayer.innerHTML = '';
+
+            if (this.windows.length === 0) {
+                emptyState.style.display = 'block';
+            } else {
+                emptyState.style.display = 'none';
+
+                // 批量渲染所有窗口
+                const fragment = document.createDocumentFragment();
+                this.windows.forEach(window => {
+                    const windowElement = this.createWindowElement(window);
+                    this.positionWindow(windowElement, window);
+                    fragment.appendChild(windowElement);
+                });
+
+                // 一次性添加到DOM
+                windowsLayer.appendChild(fragment);
+
+                // 批量设置交互功能
+                this.windows.forEach(window => {
+                    const element = document.getElementById(window.id);
+                    if (element) {
+                        this.setupWindowInteraction(element, window);
+                    }
+                });
+            }
+
+            WindowManager.log(`画布渲染完成，窗口数量: ${this.windows.length}`);
+        });
     }
 
     /**
@@ -284,83 +867,303 @@ class WindowManager {
     }
 
     /**
-     * 更新窗口布局
+     * 渲染单个窗口（用于动态添加）
      */
-    updateLayout() {
-        const container = document.getElementById('windowsContainer');
-        if (!container) return;
+    renderWindow(window) {
+        const windowsLayer = document.getElementById('windowsLayer');
+        if (!windowsLayer) return;
 
-        // 清空现有内容
-        container.innerHTML = '';
+        const windowElement = this.createWindowElement(window);
 
-        // 计算总窗口数
-        let totalWindows = this.config.firstRowCount;
-        if (this.config.rows >= 2) totalWindows += this.config.secondRowCount;
-        if (this.config.rows >= 3) totalWindows += this.config.thirdRowCount;
-        if (this.config.rows >= 4) totalWindows += this.config.fourthRowCount;
+        // 设置窗口位置和尺寸
+        this.positionWindow(windowElement, window);
 
-        // 创建网格容器
-        const grid = document.createElement('div');
-        grid.className = 'windows-grid';
+        // 添加到DOM
+        windowsLayer.appendChild(windowElement);
 
-        // 设置网格布局
-        this.applyGridLayout(grid);
+        // 设置拖拽和调整功能
+        this.setupWindowInteraction(windowElement, window);
 
-        // 创建窗口并设置网格位置
-        let windowIndex = 0;
-        const rowCounts = [this.config.firstRowCount];
-        if (this.config.rows >= 2) rowCounts.push(this.config.secondRowCount);
-        if (this.config.rows >= 3) rowCounts.push(this.config.thirdRowCount);
-        if (this.config.rows >= 4) rowCounts.push(this.config.fourthRowCount);
+        WindowManager.log(`单个窗口渲染完成: ${window.id}`);
+    }
 
-        for (let row = 0; row < this.config.rows; row++) {
-            for (let col = 0; col < rowCounts[row]; col++) {
-                const window = this.createWindow(windowIndex, row + 1, col + 1);
-                grid.appendChild(window);
-                windowIndex++;
+    /**
+     * 设置窗口位置（包含间距）
+     */
+    positionWindow(element, window) {
+        const pixel = this.gridToPixel(window.x, window.y);
+        const gap = this.canvasConfig.windowGap;
+
+        // 计算实际尺寸（减去间距）
+        const width = window.width * this.canvasConfig.cellWidth - gap;
+        const height = window.height * this.canvasConfig.cellHeight - gap;
+
+        // 设置位置（添加间距偏移）
+        element.style.left = `${pixel.x + gap / 2}px`;
+        element.style.top = `${pixel.y + gap / 2}px`;
+        element.style.width = `${width}px`;
+        element.style.height = `${height}px`;
+    }
+
+    /**
+     * 设置窗口交互功能
+     */
+    setupWindowInteraction(element, window) {
+
+        // 使用interact.js设置拖拽
+        interact(element)
+            .draggable({
+                // 关键配置：确保鼠标跟随
+                inertia: false,
+                autoScroll: true,
+                // 使用document级别的事件监听，确保鼠标移出元素也能响应
+                listeners: {
+                    start: (event) => {
+                        this.isOperating = true;
+                        this.currentDragTarget = event.target;
+                        event.target.classList.add('dragging');
+                        this.showGridOverlay();
+
+                        // 设置鼠标捕获，确保鼠标事件不会丢失
+                        if (event.target.setCapture) {
+                            event.target.setCapture();
+                        }
+
+                        // 优化拖拽性能
+                        event.target.style.willChange = 'transform';
+                        event.target.style.pointerEvents = 'none';
+
+                        // 防止文本选择和其他默认行为
+                        document.body.classList.add('dragging');
+                        document.body.style.userSelect = 'none';
+                        document.body.style.webkitUserSelect = 'none';
+
+                        WindowManager.log(`开始拖拽窗口: ${window.id}`);
+                    },
+                    move: (event) => {
+                        const target = event.target;
+                        const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+                        const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+
+                        // 直接更新DOM，不使用节流以提高响应性
+                        target.style.transform = `translate(${x}px, ${y}px)`;
+                        target.setAttribute('data-x', x);
+                        target.setAttribute('data-y', y);
+
+                        // 防止默认行为
+                        event.preventDefault();
+                    },
+                    end: (event) => {
+                        this.isOperating = false;
+                        this.currentDragTarget = null;
+                        event.target.classList.remove('dragging');
+                        this.hideGridOverlay();
+
+                        // 释放鼠标捕获
+                        if (document.releaseCapture) {
+                            document.releaseCapture();
+                        }
+
+                        // 恢复文本选择
+                        document.body.classList.remove('dragging');
+                        document.body.style.userSelect = '';
+                        document.body.style.webkitUserSelect = '';
+
+                        // 清理性能优化设置
+                        event.target.style.willChange = '';
+                        event.target.style.pointerEvents = '';
+
+                        // 确保状态完全清理后再进行吸附
+                        setTimeout(() => {
+                            this.snapWindowToGrid(event.target, window);
+                        }, 0);
+
+                        WindowManager.log(`结束拖拽窗口: ${window.id}`);
+                    }
+                }
+            })
+            .resizable({
+                edges: { left: true, right: true, bottom: true, top: true },
+                // 关键配置：确保调整大小时鼠标跟随（与拖拽保持一致）
+                inertia: false,
+                autoScroll: true,
+                preserveAspectRatio: false,
+                listeners: {
+                    start: (event) => {
+                        this.isOperating = true;
+                        this.isResizing = true;
+                        this.currentDragTarget = event.target;
+                        event.target.classList.add('resizing');
+                        this.showGridOverlay();
+
+                        // 设置鼠标捕获，确保调整大小时鼠标事件不会丢失
+                        if (event.target.setCapture) {
+                            event.target.setCapture();
+                        }
+
+                        // 防止文本选择
+                        document.body.classList.add('resizing');
+                        document.body.style.userSelect = 'none';
+                        document.body.style.webkitUserSelect = 'none';
+
+                        WindowManager.log(`开始调整窗口大小: ${window.id}`);
+                    },
+                    move: (event) => {
+                        const target = event.target;
+                        let x = (parseFloat(target.getAttribute('data-x')) || 0);
+                        let y = (parseFloat(target.getAttribute('data-y')) || 0);
+
+                        // 直接更新DOM，不使用节流以提高响应性
+                        target.style.width = event.rect.width + 'px';
+                        target.style.height = event.rect.height + 'px';
+
+                        x += event.deltaRect.left;
+                        y += event.deltaRect.top;
+
+                        target.style.transform = `translate(${x}px, ${y}px)`;
+                        target.setAttribute('data-x', x);
+                        target.setAttribute('data-y', y);
+
+                        // 防止默认行为
+                        event.preventDefault();
+                    },
+                    end: (event) => {
+                        this.isOperating = false;
+                        this.isResizing = false;
+                        this.currentDragTarget = null;
+                        event.target.classList.remove('resizing');
+                        this.hideGridOverlay();
+
+                        // 释放鼠标捕获
+                        if (document.releaseCapture) {
+                            document.releaseCapture();
+                        }
+
+                        // 恢复文本选择
+                        document.body.classList.remove('resizing');
+                        document.body.style.userSelect = '';
+                        document.body.style.webkitUserSelect = '';
+
+                        // 确保状态完全清理后再进行吸附
+                        setTimeout(() => {
+                            this.snapWindowToGrid(event.target, window);
+                        }, 0);
+
+                        WindowManager.log(`结束调整窗口大小: ${window.id}`);
+                    }
+                }
+            });
+    }
+
+    /**
+     * 将窗口吸附到网格
+     */
+    snapWindowToGrid(element, window) {
+        const rect = element.getBoundingClientRect();
+        const canvasRect = document.getElementById('canvasContainer').getBoundingClientRect();
+
+        // 计算相对于画布的位置（考虑间距）
+        const gap = this.canvasConfig.windowGap;
+        const relativeX = rect.left - canvasRect.left - gap / 2;
+        const relativeY = rect.top - canvasRect.top - gap / 2;
+
+        // 转换为网格坐标
+        const gridPos = this.pixelToGrid(relativeX, relativeY);
+        const gridWidth = Math.round((rect.width + gap) / this.canvasConfig.cellWidth);
+        const gridHeight = Math.round((rect.height + gap) / this.canvasConfig.cellHeight);
+
+        // 确保在边界内
+        const clampedX = Math.max(0, Math.min(gridPos.x, this.canvasConfig.gridCols - gridWidth));
+        const clampedY = Math.max(0, Math.min(gridPos.y, this.canvasConfig.gridRows - gridHeight));
+        const clampedWidth = Math.max(1, Math.min(gridWidth, this.canvasConfig.gridCols - clampedX));
+        const clampedHeight = Math.max(1, Math.min(gridHeight, this.canvasConfig.gridRows - clampedY));
+
+        // 检查当前位置是否可用（排除自己）
+        const validPos = this.findValidPositionForResize(clampedX, clampedY, clampedWidth, clampedHeight, window.id);
+
+        // 更新窗口数据
+        this.updateWindow(window.id, {
+            x: validPos.x,
+            y: validPos.y,
+            width: clampedWidth,
+            height: clampedHeight
+        });
+
+        // 重新定位窗口元素
+        this.positionWindow(element, { ...window, x: validPos.x, y: validPos.y, width: clampedWidth, height: clampedHeight });
+
+        // 完全清除操作状态
+        this.clearOperationState(element);
+
+        // 保存配置
+        this.saveConfig();
+
+        WindowManager.log(`窗口已吸附到网格: ${window.id} -> (${validPos.x}, ${validPos.y})`);
+    }
+
+    /**
+     * 清除操作状态
+     */
+    clearOperationState(element) {
+        // 清除transform和数据属性
+        element.style.transform = '';
+        element.removeAttribute('data-x');
+        element.removeAttribute('data-y');
+
+        // 移除所有操作相关的CSS类
+        element.classList.remove('dragging', 'resizing', 'active');
+
+        // 重置所有操作状态
+        this.isOperating = false;
+        this.isResizing = false;
+
+        WindowManager.log(`操作状态已清除: ${element.id}`);
+    }
+
+    /**
+     * 清理资源，防止内存泄漏
+     */
+    cleanup() {
+        // 移除全局事件监听器
+        if (this.globalMouseUpHandler) {
+            document.removeEventListener('mouseup', this.globalMouseUpHandler, true);
+            this.globalMouseUpHandler = null;
+        }
+
+        if (this.globalMouseMoveHandler) {
+            document.removeEventListener('mousemove', this.globalMouseMoveHandler, true);
+            this.globalMouseMoveHandler = null;
+        }
+
+        // 移除所有interact.js实例
+        this.windows.forEach(window => {
+            const element = document.getElementById(window.id);
+            if (element) {
+                interact(element).unset();
             }
-        }
+        });
 
-        container.appendChild(grid);
-        console.log(`🔄 布局已更新: ${this.config.rows}行布局, 总窗口数: ${totalWindows}`);
+        // 重置所有状态
+        this.isOperating = false;
+        this.isResizing = false;
+        this.currentDragTarget = null;
+
+        // 恢复文本选择和body类名
+        document.body.classList.remove('dragging', 'resizing');
+        document.body.style.userSelect = '';
+        document.body.style.webkitUserSelect = '';
+
+        WindowManager.log('资源清理完成');
     }
 
     /**
-     * 应用网格布局
+     * 创建窗口元素
      */
-    applyGridLayout(grid) {
-        const { rows, firstRowCount, secondRowCount, thirdRowCount, fourthRowCount } = this.config;
-
-        // 计算最大列数
-        const maxColumns = Math.max(
-            firstRowCount,
-            rows >= 2 ? secondRowCount : 0,
-            rows >= 3 ? thirdRowCount : 0,
-            rows >= 4 ? fourthRowCount : 0
-        );
-
-        // 设置网格行和列
-        grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
-        grid.style.gridTemplateColumns = `repeat(${maxColumns}, 1fr)`;
-
-        console.log(`🎯 应用网格布局: ${rows}行 × ${maxColumns}列`);
-    }
-
-
-
-    /**
-     * 创建单个窗口
-     */
-    createWindow(index, gridRow = null, gridColumn = null) {
-        const window = document.createElement('div');
-        window.className = 'window-item';
-        window.dataset.windowIndex = index;
-
-        // 设置网格位置（如果提供）
-        if (gridRow !== null && gridColumn !== null) {
-            window.style.gridRow = gridRow;
-            window.style.gridColumn = gridColumn;
-        }
+    createWindowElement(window) {
+        const windowElement = document.createElement('div');
+        windowElement.className = 'window-item window';
+        windowElement.id = window.id;
+        windowElement.dataset.windowId = window.id;
 
         // 窗口头部
         const header = document.createElement('div');
@@ -368,7 +1171,9 @@ class WindowManager {
 
         const title = document.createElement('div');
         title.className = 'window-title';
-        title.textContent = `窗口 ${index + 1}`;
+        title.textContent = window.tabs.length > 0 ?
+            `${window.tabs[0].title} ${window.tabs.length > 1 ? `(+${window.tabs.length - 1})` : ''}` :
+            `窗口 ${window.id}`;
 
         const controls = document.createElement('div');
         controls.className = 'window-controls';
@@ -376,7 +1181,10 @@ class WindowManager {
         const closeBtn = document.createElement('button');
         closeBtn.className = 'window-control-btn close';
         closeBtn.innerHTML = '×';
-        closeBtn.addEventListener('click', () => this.clearWindow(index));
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.removeWindowElement(window.id);
+        });
 
         controls.appendChild(closeBtn);
         header.appendChild(title);
@@ -386,104 +1194,167 @@ class WindowManager {
         const content = document.createElement('div');
         content.className = 'window-content';
 
-        // 空状态
-        const emptyState = document.createElement('div');
-        emptyState.className = 'window-empty';
-        emptyState.innerHTML = `
-            <div class="window-empty-icon">📄</div>
-            <p class="window-empty-text">点击右侧标签页添加内容</p>
-        `;
+        if (window.tabs.length === 0) {
+            // 空状态
+            const emptyState = document.createElement('div');
+            emptyState.className = 'window-empty';
+            emptyState.innerHTML = `
+                <div class="window-empty-icon">📄</div>
+                <p class="window-empty-text">拖拽标签页到此处</p>
+            `;
+            content.appendChild(emptyState);
+        } else if (window.tabs.length === 1) {
+            // 单个标签页：显示iframe
+            this.createIframeContent(content, window.tabs[0]);
+        } else {
+            // 多个标签页：显示标签页切换界面
+            this.createTabsContent(content, window.tabs);
+        }
 
-        content.appendChild(emptyState);
-
-        // 窗口点击事件
-        window.addEventListener('click', () => this.selectWindow(index));
-
-        window.appendChild(header);
-        window.appendChild(content);
-
-        return window;
-    }
-
-    /**
-     * 选择窗口
-     */
-    selectWindow(index) {
-        // 移除之前的选中状态
-        document.querySelectorAll('.window-item.active').forEach(item => {
-            item.classList.remove('active');
+        // 添加调整手柄
+        const resizeHandles = ['nw', 'ne', 'sw', 'se', 'n', 's', 'w', 'e'];
+        resizeHandles.forEach(direction => {
+            const handle = document.createElement('div');
+            handle.className = `resize-handle ${direction}`;
+            windowElement.appendChild(handle);
         });
 
-        // 添加新的选中状态
-        const window = document.querySelector(`[data-window-index="${index}"]`);
-        if (window) {
-            window.classList.add('active');
-            this.selectedWindow = index;
+        // 窗口点击事件（用于调试）
+        windowElement.addEventListener('click', () => {
+            WindowManager.log(`窗口被点击: ${window.id}`);
+        });
 
-            // 更新按钮状态
-            this.updateButtonStates();
+        windowElement.appendChild(header);
+        windowElement.appendChild(content);
 
-            console.log(`🎯 已选择窗口: ${index}`);
+        return windowElement;
+    }
+
+    /**
+     * 创建iframe内容（单个标签页）
+     */
+    createIframeContent(content, tab) {
+        try {
+            // 显示加载状态
+            content.innerHTML = `
+                <div class="window-loading">
+                    <div class="loading-spinner"></div>
+                    <p>加载中...</p>
+                </div>
+            `;
+
+            // 创建iframe
+            const iframe = document.createElement('iframe');
+            iframe.className = 'window-iframe';
+            iframe.src = tab.url;
+            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox';
+
+            // 设置加载超时
+            const timeout = setTimeout(() => {
+                console.warn(`⏰ iframe 加载超时: ${tab.url}`);
+                // 不移除iframe，让它继续尝试加载
+            }, 10000);
+
+            // 监听iframe加载事件
+            iframe.onload = () => {
+                clearTimeout(timeout);
+                console.log(`📄 iframe 加载完成: ${tab.url}`);
+            };
+
+            iframe.onerror = () => {
+                clearTimeout(timeout);
+                console.error(`❌ iframe 加载失败: ${tab.url}`);
+                this.showIframeError(content, '加载失败');
+            };
+
+            // 替换加载状态为iframe
+            content.innerHTML = '';
+            content.appendChild(iframe);
+
+        } catch (error) {
+            console.error('❌ 创建iframe失败:', error);
+            this.showIframeError(content, error.message);
         }
     }
 
     /**
-     * 更新按钮状态
+     * 创建标签页切换内容（多个标签页）
      */
-    updateButtonStates() {
-        const addBtn = document.getElementById('addToWindowBtn');
-        const clearBtn = document.getElementById('clearWindowBtn');
+    createTabsContent(content, tabs) {
+        // 创建标签页切换界面
+        const tabsContainer = document.createElement('div');
+        tabsContainer.className = 'window-tabs-container';
 
-        const hasSelectedTab = this.selectedTab !== null;
-        const hasSelectedWindow = this.selectedWindow !== null;
+        // 标签页头部
+        const tabsHeader = document.createElement('div');
+        tabsHeader.className = 'window-tabs-header';
 
-        if (addBtn) {
-            addBtn.disabled = !hasSelectedTab || !hasSelectedWindow;
+        tabs.slice(0, 6).forEach((tab, index) => {
+            const tabButton = document.createElement('button');
+            tabButton.className = `window-tab-button ${index === 0 ? 'active' : ''}`;
+            tabButton.dataset.tabIndex = index;
+            tabButton.innerHTML = `
+                <img src="${tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="%23999" d="M8 0C3.6 0 0 3.6 0 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8z"/></svg>'}"
+                     alt="" class="tab-favicon">
+                <span class="tab-title">${tab.title}</span>
+            `;
+
+            // 标签页切换事件
+            tabButton.addEventListener('click', () => {
+                this.switchWindowTab(content, tabs, index);
+            });
+
+            tabsHeader.appendChild(tabButton);
+        });
+
+        if (tabs.length > 6) {
+            const moreButton = document.createElement('div');
+            moreButton.className = 'window-tab-more';
+            moreButton.textContent = `+${tabs.length - 6} 更多`;
+            tabsHeader.appendChild(moreButton);
         }
 
-        if (clearBtn) {
-            clearBtn.disabled = !hasSelectedWindow || !this.windows.has(this.selectedWindow);
+        // 标签页内容区域
+        const tabsContent = document.createElement('div');
+        tabsContent.className = 'window-tabs-content';
+
+        tabsContainer.appendChild(tabsHeader);
+        tabsContainer.appendChild(tabsContent);
+        content.appendChild(tabsContainer);
+
+        // 默认显示第一个标签页
+        this.switchWindowTab(content, tabs, 0);
+    }
+
+    /**
+     * 切换窗口内的标签页
+     */
+    switchWindowTab(content, tabs, tabIndex) {
+        const tab = tabs[tabIndex];
+        if (!tab) return;
+
+        // 更新标签页按钮状态
+        content.querySelectorAll('.window-tab-button').forEach((btn, index) => {
+            btn.classList.toggle('active', index === tabIndex);
+        });
+
+        // 更新内容区域
+        const tabsContent = content.querySelector('.window-tabs-content');
+        if (tabsContent) {
+            this.createIframeContent(tabsContent, tab);
         }
     }
 
     /**
-     * 清空指定窗口
+     * 显示iframe错误状态
      */
-    clearWindow(index) {
-        const window = document.querySelector(`[data-window-index="${index}"]`);
-        if (!window) return;
-
-        const content = window.querySelector('.window-content');
-        if (!content) return;
-
-        // 移除iframe
-        const iframe = content.querySelector('.window-iframe');
-        if (iframe) {
-            iframe.remove();
-        }
-
-        // 显示空状态
+    showIframeError(content, message) {
         content.innerHTML = `
-            <div class="window-empty">
-                <div class="window-empty-icon">📄</div>
-                <p class="window-empty-text">点击右侧标签页添加内容</p>
+            <div class="window-error">
+                <div class="window-error-icon">⚠️</div>
+                <p class="window-error-text">加载失败: ${message}</p>
             </div>
         `;
-
-        // 更新窗口标题
-        const title = window.querySelector('.window-title');
-        if (title) {
-            title.textContent = `窗口 ${index + 1}`;
-        }
-
-        // 移除映射关系
-        this.windows.delete(index);
-
-        // 更新按钮状态
-        this.updateButtonStates();
-
-        console.log(`🗑️ 已清空窗口: ${index}`);
-        this.showStatusMessage(`窗口 ${index + 1} 已清空`, 'success');
     }
 
     /**
@@ -491,22 +1362,13 @@ class WindowManager {
      */
     clearAllWindows() {
         if (confirm('确定要清空所有窗口吗？')) {
-            this.windows.clear();
+            this.windows = [];
             this.selectedWindow = null;
-            this.updateLayout();
-            this.updateButtonStates();
+            this.renderCanvas();
+            this.saveConfig();
 
             console.log('🗑️ 已清空所有窗口');
             this.showStatusMessage('所有窗口已清空', 'success');
-        }
-    }
-
-    /**
-     * 清空选中的窗口
-     */
-    clearSelectedWindow() {
-        if (this.selectedWindow !== null) {
-            this.clearWindow(this.selectedWindow);
         }
     }
 
@@ -527,6 +1389,10 @@ class WindowManager {
             // 获取标签分组
             const tabGroups = await chrome.tabGroups.query({});
 
+            // 保存标签页数据供拖拽使用
+            this.availableTabs = tabs;
+            this.availableTabGroups = tabGroups;
+
             // 渲染标签页列表
             this.renderTabsList(tabs, tabGroups);
 
@@ -535,6 +1401,9 @@ class WindowManager {
             console.error('❌ 加载标签页失败:', error);
             tabsList.innerHTML = '<div class="empty-message">加载失败</div>';
             this.showStatusMessage('加载标签页失败', 'error');
+            // 确保数据结构存在
+            this.availableTabs = [];
+            this.availableTabGroups = [];
         }
     }
 
@@ -601,9 +1470,10 @@ class WindowManager {
     renderTabGroup(group, tabs) {
         const groupColor = group.color || 'grey';
         let html = '<div class="tab-group">';
-        html += '<div class="tab-group-header">';
+        html += `<div class="tab-group-header draggable" data-group-id="${group.id}" draggable="true">`;
         html += `<div class="tab-group-color" style="background-color: ${groupColor};"></div>`;
         html += `<span>${group.title || '未命名分组'} (${tabs.length})</span>`;
+        html += '<div class="drag-hint">拖拽分组到画布</div>';
         html += '</div>';
         html += '<div class="tab-group-tabs">';
         tabs.forEach(tab => {
@@ -624,8 +1494,8 @@ class WindowManager {
         const domain = this.getDomainFromUrl(url);
 
         return `
-            <div class="tab-item" data-tab-id="${tab.id}" title="${title}">
-                <img class="tab-favicon" src="${favicon}" alt="" onerror="this.style.display='none'">
+            <div class="tab-item draggable" data-tab-id="${tab.id}" title="${title}" draggable="true">
+                <img class="tab-favicon" src="${favicon}" alt="">
                 <div class="tab-info">
                     <div class="tab-title">${title}</div>
                     <div class="tab-url">${domain}</div>
@@ -650,15 +1520,63 @@ class WindowManager {
      */
     bindTabEvents() {
         document.querySelectorAll('.tab-item').forEach(item => {
+            // 处理图片加载错误
+            const favicon = item.querySelector('.tab-favicon');
+            if (favicon) {
+                favicon.addEventListener('error', () => {
+                    favicon.style.display = 'none';
+                });
+            }
+
             item.addEventListener('click', () => {
                 const tabId = parseInt(item.dataset.tabId);
                 this.selectTab(tabId, item);
             });
 
-            // 双击直接添加到空窗口
-            item.addEventListener('dblclick', () => {
+            // 双击功能已移除（画布模式不支持）
+
+            // 拖拽开始事件
+            item.addEventListener('dragstart', (e) => {
                 const tabId = parseInt(item.dataset.tabId);
-                this.autoAddTabToWindow(tabId);
+                const tab = this.availableTabs.find(t => t.id === tabId);
+                if (tab) {
+                    const dragData = {
+                        type: 'tab',
+                        tab: tab
+                    };
+                    e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
+                    e.dataTransfer.effectAllowed = 'copy';
+                    item.classList.add('dragging');
+                }
+            });
+
+            // 拖拽结束事件
+            item.addEventListener('dragend', (e) => {
+                item.classList.remove('dragging');
+            });
+        });
+
+        // 绑定标签页分组拖拽事件
+        document.querySelectorAll('.tab-group-header[data-group-id]').forEach(header => {
+            header.addEventListener('dragstart', (e) => {
+                const groupId = parseInt(header.dataset.groupId);
+                const tabs = this.availableTabs.filter(tab => tab.groupId === groupId);
+                const group = this.availableTabGroups.find(g => g.id === groupId);
+
+                if (tabs.length > 0 && group) {
+                    const dragData = {
+                        type: 'tabGroup',
+                        group: group,
+                        tabs: tabs
+                    };
+                    e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
+                    e.dataTransfer.effectAllowed = 'copy';
+                    header.classList.add('dragging');
+                }
+            });
+
+            header.addEventListener('dragend', (e) => {
+                header.classList.remove('dragging');
             });
         });
     }
@@ -683,173 +1601,13 @@ class WindowManager {
     }
 
     /**
-     * 添加标签页到窗口
-     */
-    async addTabToWindow() {
-        if (this.selectedTab === null || this.selectedWindow === null) {
-            this.showStatusMessage('请先选择标签页和窗口', 'error');
-            return;
-        }
-
-        try {
-            // 获取标签页信息
-            const tab = await chrome.tabs.get(this.selectedTab);
-
-            // 加载标签页到窗口
-            await this.loadTabInWindow(tab, this.selectedWindow);
-
-            // 保存映射关系
-            this.windows.set(this.selectedWindow, this.selectedTab);
-
-            // 更新按钮状态
-            this.updateButtonStates();
-
-            console.log(`✅ 标签页 ${this.selectedTab} 已添加到窗口 ${this.selectedWindow}`);
-            this.showStatusMessage(`已添加到窗口 ${this.selectedWindow + 1}`, 'success');
-
-        } catch (error) {
-            console.error('❌ 添加标签页到窗口失败:', error);
-            this.showStatusMessage('添加失败: ' + error.message, 'error');
-        }
-    }
-
-    /**
-     * 在窗口中加载标签页内容
-     */
-    async loadTabInWindow(tab, windowIndex) {
-        const window = document.querySelector(`[data-window-index="${windowIndex}"]`);
-        if (!window) {
-            throw new Error(`窗口 ${windowIndex} 不存在`);
-        }
-
-        const content = window.querySelector('.window-content');
-        const title = window.querySelector('.window-title');
-
-        if (!content || !title) {
-            throw new Error('窗口结构不完整');
-        }
-
-        // 显示加载状态
-        content.innerHTML = `
-            <div class="window-loading">
-                <div class="loading-spinner"></div>
-                <p>加载中...</p>
-            </div>
-        `;
-
-        // 更新窗口标题
-        title.textContent = tab.title || '无标题';
-
-        try {
-            // 创建iframe
-            const iframe = document.createElement('iframe');
-            iframe.className = 'window-iframe';
-            iframe.src = tab.url;
-            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox';
-
-            // 设置加载超时
-            const timeout = setTimeout(() => {
-                console.warn(`⏰ iframe 加载超时: ${tab.url}`);
-                // 不移除iframe，让它继续尝试加载
-            }, 10000);
-
-            // 监听iframe加载事件（合并重复的onload处理）
-            iframe.onload = () => {
-                clearTimeout(timeout);
-                console.log(`📄 iframe 加载完成: ${tab.url}`);
-            };
-
-            iframe.onerror = () => {
-                clearTimeout(timeout);
-                console.error(`❌ iframe 加载失败: ${tab.url}`);
-                this.showIframeError(content, '加载失败');
-            };
-
-            // 替换加载状态为iframe
-            content.innerHTML = '';
-            content.appendChild(iframe);
-
-        } catch (error) {
-            console.error('❌ 创建iframe失败:', error);
-            this.showIframeError(content, error.message);
-            throw error;
-        }
-    }
-
-    /**
-     * 显示iframe错误状态
-     */
-    showIframeError(content, message) {
-        content.innerHTML = `
-            <div class="window-error">
-                <div class="window-error-icon">⚠️</div>
-                <p class="window-error-text">加载失败: ${message}</p>
-            </div>
-        `;
-    }
-
-    /**
-     * 查找空窗口
-     */
-    findEmptyWindow() {
-        const totalWindows = this.config.rows === 1
-            ? this.config.firstRowCount
-            : this.config.firstRowCount + this.config.secondRowCount;
-
-        for (let i = 0; i < totalWindows; i++) {
-            if (!this.windows.has(i)) {
-                return i;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 自动添加标签页到空窗口
-     */
-    async autoAddTabToWindow(tabId) {
-        const emptyWindow = this.findEmptyWindow();
-        if (emptyWindow === null) {
-            this.showStatusMessage('没有空窗口可用', 'error');
-            return false;
-        }
-
-        try {
-            const tab = await chrome.tabs.get(tabId);
-            await this.loadTabInWindow(tab, emptyWindow);
-            this.windows.set(emptyWindow, tabId);
-
-            // 选中这个窗口
-            this.selectWindow(emptyWindow);
-
-            console.log(`✅ 标签页 ${tabId} 已自动添加到窗口 ${emptyWindow}`);
-            this.showStatusMessage(`已添加到窗口 ${emptyWindow + 1}`, 'success');
-            return true;
-
-        } catch (error) {
-            console.error('❌ 自动添加标签页失败:', error);
-            this.showStatusMessage('添加失败: ' + error.message, 'error');
-            return false;
-        }
-    }
-
-    /**
      * 处理键盘快捷键
      */
     handleKeyboardShortcuts(e) {
-        // Ctrl/Cmd + Enter: 添加选中标签页到选中窗口
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        // F5: 刷新标签页列表
+        if (e.key === 'F5') {
             e.preventDefault();
-            if (this.selectedTab !== null && this.selectedWindow !== null) {
-                this.addTabToWindow();
-            }
-            return;
-        }
-
-        // Delete/Backspace: 清空选中窗口
-        if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedWindow !== null) {
-            e.preventDefault();
-            this.clearSelectedWindow();
+            this.loadAvailableTabs();
             return;
         }
 
@@ -859,78 +1617,19 @@ class WindowManager {
             this.clearSelection();
             return;
         }
-
-        // F5: 刷新标签页列表
-        if (e.key === 'F5') {
-            e.preventDefault();
-            this.loadAvailableTabs();
-            return;
-        }
-
-        // 数字键1-9: 选择窗口
-        if (e.key >= '1' && e.key <= '9') {
-            const windowIndex = parseInt(e.key) - 1;
-            const totalWindows = this.config.rows === 1
-                ? this.config.firstRowCount
-                : this.config.firstRowCount + this.config.secondRowCount;
-
-            if (windowIndex < totalWindows) {
-                e.preventDefault();
-                this.selectWindow(windowIndex);
-            }
-            return;
-        }
     }
 
     /**
      * 清除所有选择
      */
     clearSelection() {
-        // 清除窗口选择
-        document.querySelectorAll('.window-item.active').forEach(item => {
-            item.classList.remove('active');
-        });
-        this.selectedWindow = null;
-
         // 清除标签页选择
         document.querySelectorAll('.tab-item.selected').forEach(item => {
             item.classList.remove('selected');
         });
         this.selectedTab = null;
 
-        // 更新按钮状态
-        this.updateButtonStates();
-
         console.log('🔄 已清除所有选择');
-    }
-
-    /**
-     * 获取窗口统计信息
-     */
-    getWindowStats() {
-        const totalWindows = this.config.rows === 1
-            ? this.config.firstRowCount
-            : this.config.firstRowCount + this.config.secondRowCount;
-
-        const usedWindows = this.windows.size;
-        const emptyWindows = totalWindows - usedWindows;
-
-        return {
-            total: totalWindows,
-            used: usedWindows,
-            empty: emptyWindows
-        };
-    }
-
-    /**
-     * 更新状态信息显示
-     */
-    updateStatusInfo() {
-        const stats = this.getWindowStats();
-        const statusText = `窗口: ${stats.used}/${stats.total} 使用中`;
-
-        // 可以在这里更新状态栏显示
-        console.log(`📊 ${statusText}`);
     }
 }
 

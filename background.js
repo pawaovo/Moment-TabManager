@@ -4,12 +4,13 @@
  * 合并了链接预览和标签管理功能
  */
 
-// 用户快捷键设置缓存（TabManager功能）
+// 用户快捷键设置缓存（包括窗口管理器快捷键）
 let userShortcuts = {
     group: 'Ctrl+M',
     dedupe: 'Ctrl+Shift+M',
     copy: 'Ctrl+K',
-    ungroup: 'Ctrl+Shift+K'
+    ungroup: 'Ctrl+Shift+K',
+    windowManager: 'Ctrl+Shift+Q'
 };
 
 // 扩展程序安装时的初始化
@@ -143,13 +144,39 @@ async function initializeDefaultSettings() {
 // 处理扩展程序图标点击事件
 chrome.action.onClicked.addListener(async (tab) => {
     try {
-        // 打开侧边栏
-        await chrome.sidePanel.open({ tabId: tab.id });
-        console.log('📱 侧边栏已打开');
+        // 检查当前标签页是否是扩展程序页面
+        if (tab.url && tab.url.startsWith(chrome.runtime.getURL(''))) {
+            console.log('📱 当前在扩展程序页面，尝试打开侧边栏');
+            // 如果是扩展程序页面，尝试在当前窗口的其他标签页打开侧边栏
+            const tabs = await chrome.tabs.query({ currentWindow: true });
+            const nonExtensionTab = tabs.find(t => t.url && !t.url.startsWith(chrome.runtime.getURL('')));
+
+            if (nonExtensionTab) {
+                await chrome.sidePanel.open({ tabId: nonExtensionTab.id });
+                console.log('📱 侧边栏已在标签页打开:', nonExtensionTab.id);
+            } else {
+                // 如果没有其他标签页，创建一个新的标签页
+                const newTab = await chrome.tabs.create({ url: 'chrome://newtab/' });
+                // 等待标签页加载完成
+                setTimeout(async () => {
+                    try {
+                        await chrome.sidePanel.open({ tabId: newTab.id });
+                        console.log('📱 侧边栏已在新标签页打开:', newTab.id);
+                    } catch (error) {
+                        console.error('❌ 在新标签页打开侧边栏失败:', error);
+                    }
+                }, 500);
+            }
+        } else {
+            // 正常情况，直接在当前标签页打开侧边栏
+            await chrome.sidePanel.open({ tabId: tab.id });
+            console.log('📱 侧边栏已打开');
+        }
     } catch (error) {
         console.error('❌ 打开侧边栏失败:', error);
     }
 });
+
 
 // 监听来自content script的消息
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
@@ -184,6 +211,25 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
     // 处理TabManager消息
     switch (request.action) {
+
+
+        case 'openSidePanel':
+            // 处理打开侧边栏请求
+            (async () => {
+                try {
+                    const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                    if (currentTab) {
+                        await chrome.sidePanel.open({ tabId: currentTab.id });
+                        console.log('📱 侧边栏已打开');
+                        sendResponse({ success: true });
+                    }
+                } catch (error) {
+                    console.error('❌ 打开侧边栏失败:', error);
+                    sendResponse({ success: false, error: error.message });
+                }
+            })();
+            return true; // 保持消息通道开放
+
         case 'groupTabs':
             handleTabAction('groupTabs', sendResponse);
             return true;
@@ -210,6 +256,22 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
         case 'updateShortcuts':
             handleUpdateShortcuts(request.shortcuts, sendResponse);
+            return true;
+
+        case 'triggerWindowManager':
+            // 处理来自content script的窗口管理器快捷键触发
+            (async () => {
+                try {
+                    const tab = await chrome.tabs.create({
+                        url: chrome.runtime.getURL('window-manager.html')
+                    });
+                    console.log('🪟 窗口管理页面已通过自定义快捷键打开:', tab.id);
+                    sendResponse({ success: true });
+                } catch (error) {
+                    console.error('❌ 通过自定义快捷键打开窗口管理页面失败:', error);
+                    sendResponse({ success: false, error: error.message });
+                }
+            })();
             return true;
 
 
@@ -455,8 +517,6 @@ async function handleUpdateShortcuts(shortcuts, sendResponse) {
         handleError('更新快捷键', error, sendResponse);
     }
 }
-
-
 
 // ===== TabManager 类实现 =====
 // 🔧 注意：这是 background.js 中的 TabManager 类副本

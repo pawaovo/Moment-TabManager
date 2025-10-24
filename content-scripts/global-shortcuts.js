@@ -14,12 +14,13 @@
 
 
 
-    // 用户快捷键设置
+    // 用户快捷键设置（包含窗口管理器快捷键）
     let userShortcuts = {
         group: 'Ctrl+M',
         dedupe: 'Ctrl+Shift+M',
         copy: 'Ctrl+K',
-        ungroup: 'Ctrl+Shift+K'
+        ungroup: 'Ctrl+Shift+K',
+        windowManager: 'Ctrl+Shift+Q'  // 窗口管理器快捷键也存储在这里
     };
 
     /**
@@ -27,7 +28,7 @@
      */
     async function loadUserShortcuts() {
         try {
-            // 直接从本地存储获取设置
+            // 获取所有快捷键（包括窗口管理器快捷键）
             const result = await chrome.storage.local.get(['moment-tab-shortcuts']);
             if (result['moment-tab-shortcuts']) {
                 userShortcuts = { ...userShortcuts, ...result['moment-tab-shortcuts'] };
@@ -153,7 +154,8 @@
             [userShortcuts.group]: () => chrome.runtime.sendMessage({ action: 'groupTabs' }),
             [userShortcuts.dedupe]: () => chrome.runtime.sendMessage({ action: 'deduplicateTabs' }),
             [userShortcuts.copy]: () => showCopyTabsModal(),
-            [userShortcuts.ungroup]: () => chrome.runtime.sendMessage({ action: 'ungroupTabs' })
+            [userShortcuts.ungroup]: () => chrome.runtime.sendMessage({ action: 'ungroupTabs' }),
+            [userShortcuts.windowManager]: () => chrome.runtime.sendMessage({ action: 'triggerWindowManager' })
         };
 
         // 检查并执行匹配的快捷键

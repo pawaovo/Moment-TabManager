@@ -62,6 +62,8 @@
     "default_path": "sidepanel.html"
   },
 
+
+
   "declarative_net_request": {
     "rule_resources": [
       {

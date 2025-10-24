@@ -47,6 +47,9 @@ class UnifiedSidepanel {
                 this.linkWindowSettings = this.getDefaultLinkWindowSettings();
             }
 
+            // 加载快捷键设置（包括窗口管理器快捷键）
+            await this.updateShortcutDisplays();
+
             console.log('📋 设置已加载');
         } catch (error) {
             console.error('❌ 加载设置失败:', error);
@@ -114,13 +117,21 @@ class UnifiedSidepanel {
         document.querySelectorAll('.tab-button').forEach(btn => {
             btn.classList.remove('active');
         });
-        document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+        const targetButton = document.querySelector(`[data-tab="${tabName}"]`);
+        if (targetButton) {
+            targetButton.classList.add('active');
+        }
 
         // 更新内容面板
         document.querySelectorAll('.tab-content').forEach(content => {
             content.classList.remove('active');
         });
-        document.getElementById(tabName).classList.add('active');
+
+        const targetContent = document.getElementById(tabName);
+        if (targetContent) {
+            targetContent.classList.add('active');
+        }
 
         this.currentTab = tabName;
         console.log(`🔄 切换到 ${tabName} 面板`);
@@ -145,15 +156,16 @@ class UnifiedSidepanel {
             this.showCopyModal();
         });
 
-        // 🔧 优化：统一的快捷键编辑按钮绑定
-        const shortcutButtons = [
-            { id: 'groupShortcutEditBtn', type: 'group' },
-            { id: 'dedupeShortcutEditBtn', type: 'dedupe' },
-            { id: 'copyShortcutEditBtn', type: 'copy' },
-            { id: 'ungroupShortcutEditBtn', type: 'ungroup' }
+        // 🔧 优化：统一的快捷键显示区域点击绑定
+        const shortcutDisplays = [
+            { id: 'groupShortcutDisplay', type: 'group' },
+            { id: 'dedupeShortcutDisplay', type: 'dedupe' },
+            { id: 'copyShortcutDisplay', type: 'copy' },
+            { id: 'ungroupShortcutDisplay', type: 'ungroup' },
+            { id: 'windowManagerShortcutDisplay', type: 'windowManager' }
         ];
 
-        shortcutButtons.forEach(({ id, type }) => {
+        shortcutDisplays.forEach(({ id, type }) => {
             document.getElementById(id)?.addEventListener('click', () => {
                 this.startShortcutEdit(type);
             });
@@ -278,15 +290,14 @@ class UnifiedSidepanel {
             .join('+');
     }
 
-
-
     // 🔧 新增：获取默认快捷键配置
     getDefaultShortcuts() {
         return {
             group: 'Ctrl+M',
             dedupe: 'Ctrl+Shift+M',
             copy: 'Ctrl+K',
-            ungroup: 'Ctrl+Shift+K'
+            ungroup: 'Ctrl+Shift+K',
+            windowManager: 'Ctrl+Shift+Q'
         };
     }
 
@@ -296,7 +307,8 @@ class UnifiedSidepanel {
             group: 'groupTabs',
             dedupe: 'dedupeTabs',
             copy: 'copyTabs',
-            ungroup: 'ungroupTabs'
+            ungroup: 'ungroupTabs',
+            windowManager: 'openWindowManager'
         };
     }
 
@@ -381,13 +393,10 @@ class UnifiedSidepanel {
             this.openWindowManager();
         });
 
-        // 注意：布局配置和标签页列表功能已移至独立的窗口管理页面
-        // 这里只保留打开窗口管理器的功能
     }
 
     async openWindowManager() {
         try {
-            // 创建窗口管理页面
             const tab = await chrome.tabs.create({
                 url: chrome.runtime.getURL('window-manager.html')
             });
@@ -399,11 +408,6 @@ class UnifiedSidepanel {
             this.showStatusMessage('打开窗口管理页面失败: ' + error.message, 'error');
         }
     }
-    // 配置管理功能已移至 window-manager.js，避免代码重复
-    // 标签页管理功能已移至 window-manager.js，避免代码重复
-
-
-
 
 
     updateUI() {
@@ -428,7 +432,7 @@ class UnifiedSidepanel {
     }
 
     async updateWindowManagerUI() {
-        // 窗口管理功能已移至独立页面，侧边栏只显示基本信息
+        // 窗口管理器快捷键已通过 updateShortcutDisplays() 加载和显示
         console.log('✅ 窗口管理面板已显示');
     }
 
@@ -767,10 +771,15 @@ class UnifiedSidepanel {
 
     async confirmShortcut() {
         if (this.currentShortcut) {
-            // 检查是否是标签管理快捷键设置
+            // 检查是否是标签管理或窗口管理快捷键设置
             if (this.currentEditingShortcutType) {
-                // 标签管理快捷键设置
-                await this.saveTabManagerShortcut(this.currentEditingShortcutType, this.currentShortcut);
+                if (this.currentEditingShortcutType === 'windowManager') {
+                    // 窗口管理器快捷键设置
+                    await this.saveWindowManagerShortcut(this.currentShortcut);
+                } else {
+                    // 标签管理快捷键设置
+                    await this.saveTabManagerShortcut(this.currentEditingShortcutType, this.currentShortcut);
+                }
                 this.currentEditingShortcutType = null;
             } else {
                 // 链接弹窗快捷键设置
@@ -833,6 +842,14 @@ class UnifiedSidepanel {
             }
         }
     }
+
+    // 保存窗口管理器快捷键 - 使用与标签管理快捷键完全相同的逻辑
+    async saveWindowManagerShortcut(shortcut) {
+        // 直接调用标签管理快捷键的保存方法，将windowManager作为type
+        await this.saveTabManagerShortcut('windowManager', shortcut);
+    }
+
+
 
     // 🔧 优化：通过扩展API保存快捷键
     async _saveViaExtension(type, shortcut) {

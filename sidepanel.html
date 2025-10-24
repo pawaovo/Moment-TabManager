@@ -78,9 +78,9 @@
                     <div class="setting-item">
                         <label class="setting-label">分组快捷键</label>
                         <div class="shortcut-input-wrapper" id="groupShortcutWrapper">
-                            <div class="shortcut-display" id="groupShortcutDisplay">
+                            <div class="shortcut-display clickable-shortcut" id="groupShortcutDisplay">
                                 <span class="shortcut-keys" id="groupShortcutText">Ctrl+M</span>
-                                <button class="shortcut-edit-btn" id="groupShortcutEditBtn">修改</button>
+                                <span class="shortcut-hint">点击修改</span>
                             </div>
                             <div class="shortcut-input-container" id="groupShortcutInputContainer" style="display: none;">
                                 <input type="text" class="shortcut-input" id="groupShortcutInput"
@@ -97,9 +97,9 @@
                     <div class="setting-item">
                         <label class="setting-label">去重快捷键</label>
                         <div class="shortcut-input-wrapper" id="dedupeShortcutWrapper">
-                            <div class="shortcut-display" id="dedupeShortcutDisplay">
+                            <div class="shortcut-display clickable-shortcut" id="dedupeShortcutDisplay">
                                 <span class="shortcut-keys" id="dedupeShortcutText">Ctrl+Shift+M</span>
-                                <button class="shortcut-edit-btn" id="dedupeShortcutEditBtn">修改</button>
+                                <span class="shortcut-hint">点击修改</span>
                             </div>
                             <div class="shortcut-input-container" id="dedupeShortcutInputContainer" style="display: none;">
                                 <input type="text" class="shortcut-input" id="dedupeShortcutInput"
@@ -116,9 +116,9 @@
                     <div class="setting-item">
                         <label class="setting-label">复制快捷键</label>
                         <div class="shortcut-input-wrapper" id="copyShortcutWrapper">
-                            <div class="shortcut-display" id="copyShortcutDisplay">
+                            <div class="shortcut-display clickable-shortcut" id="copyShortcutDisplay">
                                 <span class="shortcut-keys" id="copyShortcutText">Ctrl+K</span>
-                                <button class="shortcut-edit-btn" id="copyShortcutEditBtn">修改</button>
+                                <span class="shortcut-hint">点击修改</span>
                             </div>
                             <div class="shortcut-input-container" id="copyShortcutInputContainer" style="display: none;">
                                 <input type="text" class="shortcut-input" id="copyShortcutInput"
@@ -135,9 +135,9 @@
                     <div class="setting-item">
                         <label class="setting-label">取消分组快捷键</label>
                         <div class="shortcut-input-wrapper" id="ungroupShortcutWrapper">
-                            <div class="shortcut-display" id="ungroupShortcutDisplay">
+                            <div class="shortcut-display clickable-shortcut" id="ungroupShortcutDisplay">
                                 <span class="shortcut-keys" id="ungroupShortcutText">Ctrl+Shift+K</span>
-                                <button class="shortcut-edit-btn" id="ungroupShortcutEditBtn">修改</button>
+                                <span class="shortcut-hint">点击修改</span>
                             </div>
                             <div class="shortcut-input-container" id="ungroupShortcutInputContainer" style="display: none;">
                                 <input type="text" class="shortcut-input" id="ungroupShortcutInput"
@@ -331,8 +331,32 @@
                     <button class="btn-action" id="openWindowManagerBtn">
                         <span class="btn-icon">🪟</span>
                         <span class="btn-text">打开窗口管理器</span>
-                        <span class="btn-shortcut">点击打开</span>
+                        <span class="btn-shortcut">Ctrl+Shift+Q</span>
                     </button>
+                </div>
+
+                <!-- 窗口管理器快捷键设置 -->
+                <div class="settings-section">
+                    <h3 class="section-title">快捷键设置</h3>
+
+                    <!-- 窗口管理器快捷键 -->
+                    <div class="setting-item">
+                        <label class="setting-label">窗口管理器快捷键</label>
+                        <div class="shortcut-input-wrapper" id="windowManagerShortcutWrapper">
+                            <div class="shortcut-display clickable-shortcut" id="windowManagerShortcutDisplay">
+                                <span class="shortcut-keys" id="windowManagerShortcutText">Ctrl+Shift+Q</span>
+                                <span class="shortcut-hint">点击修改</span>
+                            </div>
+                            <div class="shortcut-input-container" id="windowManagerShortcutInputContainer" style="display: none;">
+                                <input type="text" class="shortcut-input" id="windowManagerShortcutInput"
+                                       placeholder="按下你想要的快捷键组合..." readonly>
+                                <div class="shortcut-actions">
+                                    <button class="shortcut-save-btn" id="windowManagerShortcutSaveBtn" disabled>保存</button>
+                                    <button class="shortcut-cancel-btn" id="windowManagerShortcutCancelBtn">取消</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 功能说明 -->
@@ -340,9 +364,8 @@
                     <h3 class="section-title">功能说明</h3>
                     <div class="feature-description">
                         <p>🪟 <strong>多窗口展示</strong>：在一个页面中同时查看多个网页内容</p>
-                        <p>🎛️ <strong>自定义布局</strong>：支持1-2行，每行1-3个窗口的灵活布局</p>
+                        <p>🎛️ <strong>自定义布局</strong>：支持多行多窗口的灵活布局</p>
                         <p>🔄 <strong>实时同步</strong>：直接操作真实的浏览器标签页内容</p>
-                        <p>⌨️ <strong>快捷操作</strong>：支持键盘快捷键和双击快速添加</p>
                     </div>
 
                     <div class="help-tip">
