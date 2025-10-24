@@ -22,7 +22,8 @@ class WindowManager {
             gridCols: 6,            // 网格列数
             gridRows: 4,            // 网格行数
             cellWidth: 0,           // 单元格宽度 (运行时计算)
-            cellHeight: 0           // 单元格高度 (运行时计算)
+            cellHeight: 0,          // 单元格高度 (运行时计算)
+            windowGap: 4            // 窗口间隙 (像素)
         };
 
         // 窗口数组：存储所有窗口信息
@@ -44,7 +45,30 @@ class WindowManager {
         // 存储键名
         this.STORAGE_KEY = 'window-manager-canvas-config';
 
+        // 操作状态管理
+        this.isOperating = false;
+        this.isResizing = false;
+
+        // 全局事件监听相关
+        this.globalMouseUpHandler = null;
+        this.globalMouseMoveHandler = null;
+        this.currentDragTarget = null;
+
         WindowManager.log('初始化画布模式');
+    }
+
+    /**
+     * 性能优化：节流函数
+     */
+    throttle(func, limit) {
+        let inThrottle;
+        return function(...args) {
+            if (!inThrottle) {
+                func.apply(this, args);
+                inThrottle = true;
+                setTimeout(() => inThrottle = false, limit);
+            }
+        };
     }
 
     /**
@@ -123,19 +147,12 @@ class WindowManager {
         if (properties.x !== undefined || properties.y !== undefined ||
             properties.width !== undefined || properties.height !== undefined) {
 
-            // 临时移除当前窗口进行碰撞检测
-            const index = this.windows.indexOf(window);
-            this.windows.splice(index, 1);
-
-            if (!this.isPositionAvailable(window.x, window.y, window.width, window.height)) {
+            // 检查新位置是否可用（排除自己）
+            if (!this.isPositionAvailable(window.x, window.y, window.width, window.height, window.id)) {
                 // 恢复原始状态
                 Object.assign(window, oldWindow);
-                this.windows.splice(index, 0, window);
                 throw new Error('目标位置不可用');
             }
-
-            // 重新添加窗口
-            this.windows.splice(index, 0, window);
         }
 
         WindowManager.log(`更新窗口: ${window.id}`);
@@ -196,7 +213,7 @@ class WindowManager {
     /**
      * 检查位置是否可用
      */
-    isPositionAvailable(x, y, width, height) {
+    isPositionAvailable(x, y, width, height, excludeWindowId = null) {
         // 检查边界
         if (x < 0 || y < 0 || x + width > this.canvasConfig.gridCols || y + height > this.canvasConfig.gridRows) {
             return false;
@@ -204,6 +221,10 @@ class WindowManager {
 
         // 检查与现有窗口的重叠
         for (const window of this.windows) {
+            if (excludeWindowId && window.id === excludeWindowId) {
+                continue; // 跳过被排除的窗口
+            }
+
             if (this.checkWindowCollision(
                 { x, y, width, height },
                 window
@@ -228,12 +249,12 @@ class WindowManager {
     }
 
     /**
-     * 寻找最近的可用位置
+     * 通用的位置搜索方法
      */
-    findNearestValidPosition(targetX, targetY, width, height) {
+    findNearestValidPosition(targetX, targetY, width, height, excludeWindowId = null, startDistance = 0) {
         const maxDistance = this.canvasConfig.gridCols + this.canvasConfig.gridRows;
 
-        for (let distance = 0; distance <= maxDistance; distance++) {
+        for (let distance = startDistance; distance <= maxDistance; distance++) {
             // 搜索以目标位置为中心的正方形区域
             for (let dx = -distance; dx <= distance; dx++) {
                 for (let dy = -distance; dy <= distance; dy++) {
@@ -243,7 +264,7 @@ class WindowManager {
                     const x = targetX + dx;
                     const y = targetY + dy;
 
-                    if (this.isPositionAvailable(x, y, width, height)) {
+                    if (this.isPositionAvailable(x, y, width, height, excludeWindowId)) {
                         return { x, y };
                     }
                 }
@@ -251,6 +272,22 @@ class WindowManager {
         }
 
         return null;
+    }
+
+    /**
+     * 为调整大小操作寻找有效位置（优先保持原位置）
+     */
+    findValidPositionForResize(targetX, targetY, width, height, excludeWindowId) {
+        // 首先检查当前位置是否可用（排除自己）
+        if (this.isPositionAvailable(targetX, targetY, width, height, excludeWindowId)) {
+            return { x: targetX, y: targetY };
+        }
+
+        // 如果当前位置不可用，寻找最近的可用位置（从距离1开始）
+        const result = this.findNearestValidPosition(targetX, targetY, width, height, excludeWindowId, 1);
+
+        // 如果找不到可用位置，返回原位置（这种情况很少发生）
+        return result || { x: targetX, y: targetY };
     }
 
     /**
@@ -297,8 +334,6 @@ class WindowManager {
         document.getElementById('clearAllBtn')?.addEventListener('click', () => {
             this.clearAllWindows();
         });
-
-
 
         // 键盘快捷键
         document.addEventListener('keydown', (e) => {
@@ -437,12 +472,28 @@ class WindowManager {
      */
     setupCanvas() {
         this.initializeCanvasDimensions();
+        this.setupGridOverlay();
+        this.setupGlobalEventListeners();
         this.setupDropZone();
         this.renderCanvas();
 
-        // 监听窗口大小变化
-        window.addEventListener('resize', () => {
+        // 监听窗口大小变化（使用防抖优化）
+        const debouncedResize = this.throttle(() => {
             this.initializeCanvasDimensions();
+            // 重新定位所有窗口以适应新的画布尺寸
+            this.windows.forEach(window => {
+                const element = document.getElementById(window.id);
+                if (element) {
+                    this.positionWindow(element, window);
+                }
+            });
+        }, 250);
+
+        window.addEventListener('resize', debouncedResize);
+
+        // 页面卸载时清理资源
+        window.addEventListener('beforeunload', () => {
+            this.cleanup();
         });
 
         WindowManager.log('画布初始化完成');
@@ -460,6 +511,77 @@ class WindowManager {
         this.canvasConfig.cellHeight = rect.height / this.canvasConfig.gridRows;
 
         WindowManager.log(`画布尺寸: ${rect.width}×${rect.height}, 单元格: ${this.canvasConfig.cellWidth}×${this.canvasConfig.cellHeight}`);
+    }
+
+    /**
+     * 设置网格覆盖层
+     */
+    setupGridOverlay() {
+        const gridOverlay = document.getElementById('gridOverlay');
+        if (!gridOverlay) return;
+
+        // 清空现有网格
+        gridOverlay.innerHTML = '';
+
+        // 创建网格单元格
+        const totalCells = this.canvasConfig.gridCols * this.canvasConfig.gridRows;
+        for (let i = 0; i < totalCells; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            gridOverlay.appendChild(cell);
+        }
+
+        WindowManager.log('网格覆盖层初始化完成');
+    }
+
+    /**
+     * 设置全局事件监听（备用机制）
+     */
+    setupGlobalEventListeners() {
+        // 全局鼠标抬起事件，确保操作能正确结束
+        this.globalMouseUpHandler = (event) => {
+            if (this.isOperating || this.isResizing) {
+                WindowManager.log('全局鼠标抬起，强制结束操作');
+                this.forceEndOperation();
+            }
+        };
+
+        // 全局鼠标移动事件（备用）
+        this.globalMouseMoveHandler = (event) => {
+            if (this.currentDragTarget && (this.isOperating || this.isResizing)) {
+                event.preventDefault();
+            }
+        };
+
+        document.addEventListener('mouseup', this.globalMouseUpHandler, true);
+        document.addEventListener('mousemove', this.globalMouseMoveHandler, true);
+
+        WindowManager.log('全局事件监听器已设置');
+    }
+
+    /**
+     * 强制结束操作
+     */
+    forceEndOperation() {
+        if (this.currentDragTarget) {
+            // 使用统一的状态清理方法
+            this.clearOperationState(this.currentDragTarget);
+            this.hideGridOverlay();
+
+            // 恢复全局状态
+            document.body.classList.remove('dragging', 'resizing');
+            document.body.style.userSelect = '';
+            document.body.style.webkitUserSelect = '';
+
+            // 释放鼠标捕获
+            if (document.releaseCapture) {
+                document.releaseCapture();
+            }
+
+            this.currentDragTarget = null;
+        }
+
+        WindowManager.log('操作已强制结束');
     }
 
     /**
@@ -559,8 +681,9 @@ class WindowManager {
      */
     showGridOverlay() {
         const gridOverlay = document.getElementById('gridOverlay');
-        if (gridOverlay) {
+        if (gridOverlay && !gridOverlay.classList.contains('visible')) {
             gridOverlay.classList.add('visible');
+            WindowManager.log('显示网格辅助');
         }
     }
 
@@ -568,9 +691,15 @@ class WindowManager {
      * 隐藏网格辅助
      */
     hideGridOverlay() {
-        const gridOverlay = document.getElementById('gridOverlay');
-        if (gridOverlay) {
-            gridOverlay.classList.remove('visible');
+        // 只有在没有进行任何操作时才隐藏网格
+        if (!this.isOperating && !this.isResizing) {
+            const gridOverlay = document.getElementById('gridOverlay');
+            if (gridOverlay && gridOverlay.classList.contains('visible')) {
+                gridOverlay.classList.remove('visible');
+                WindowManager.log('隐藏网格辅助');
+            }
+        } else {
+            WindowManager.log('操作进行中，保持网格显示');
         }
     }
 
@@ -677,7 +806,7 @@ class WindowManager {
     }
 
     /**
-     * 渲染画布
+     * 渲染画布（优化版本）
      */
     renderCanvas() {
         const windowsLayer = document.getElementById('windowsLayer');
@@ -685,19 +814,38 @@ class WindowManager {
 
         if (!windowsLayer || !emptyState) return;
 
-        // 清空现有窗口
-        windowsLayer.innerHTML = '';
+        // 使用 requestAnimationFrame 优化渲染
+        requestAnimationFrame(() => {
+            // 清空现有窗口
+            windowsLayer.innerHTML = '';
 
-        if (this.windows.length === 0) {
-            emptyState.style.display = 'block';
-        } else {
-            emptyState.style.display = 'none';
+            if (this.windows.length === 0) {
+                emptyState.style.display = 'block';
+            } else {
+                emptyState.style.display = 'none';
 
-            // 渲染所有窗口
-            this.windows.forEach(window => {
-                this.renderWindow(window);
-            });
-        }
+                // 批量渲染所有窗口
+                const fragment = document.createDocumentFragment();
+                this.windows.forEach(window => {
+                    const windowElement = this.createWindowElement(window);
+                    this.positionWindow(windowElement, window);
+                    fragment.appendChild(windowElement);
+                });
+
+                // 一次性添加到DOM
+                windowsLayer.appendChild(fragment);
+
+                // 批量设置交互功能
+                this.windows.forEach(window => {
+                    const element = document.getElementById(window.id);
+                    if (element) {
+                        this.setupWindowInteraction(element, window);
+                    }
+                });
+            }
+
+            WindowManager.log(`画布渲染完成，窗口数量: ${this.windows.length}`);
+        });
     }
 
     /**
@@ -719,32 +867,40 @@ class WindowManager {
     }
 
     /**
-     * 渲染单个窗口
+     * 渲染单个窗口（用于动态添加）
      */
     renderWindow(window) {
         const windowsLayer = document.getElementById('windowsLayer');
         if (!windowsLayer) return;
 
         const windowElement = this.createWindowElement(window);
-        windowsLayer.appendChild(windowElement);
 
         // 设置窗口位置和尺寸
         this.positionWindow(windowElement, window);
 
+        // 添加到DOM
+        windowsLayer.appendChild(windowElement);
+
         // 设置拖拽和调整功能
         this.setupWindowInteraction(windowElement, window);
+
+        WindowManager.log(`单个窗口渲染完成: ${window.id}`);
     }
 
     /**
-     * 设置窗口位置
+     * 设置窗口位置（包含间距）
      */
     positionWindow(element, window) {
         const pixel = this.gridToPixel(window.x, window.y);
-        const width = window.width * this.canvasConfig.cellWidth;
-        const height = window.height * this.canvasConfig.cellHeight;
+        const gap = this.canvasConfig.windowGap;
 
-        element.style.left = `${pixel.x}px`;
-        element.style.top = `${pixel.y}px`;
+        // 计算实际尺寸（减去间距）
+        const width = window.width * this.canvasConfig.cellWidth - gap;
+        const height = window.height * this.canvasConfig.cellHeight - gap;
+
+        // 设置位置（添加间距偏移）
+        element.style.left = `${pixel.x + gap / 2}px`;
+        element.style.top = `${pixel.y + gap / 2}px`;
         element.style.width = `${width}px`;
         element.style.height = `${height}px`;
     }
@@ -753,41 +909,111 @@ class WindowManager {
      * 设置窗口交互功能
      */
     setupWindowInteraction(element, window) {
+
         // 使用interact.js设置拖拽
         interact(element)
             .draggable({
+                // 关键配置：确保鼠标跟随
+                inertia: false,
+                autoScroll: true,
+                // 使用document级别的事件监听，确保鼠标移出元素也能响应
                 listeners: {
                     start: (event) => {
+                        this.isOperating = true;
+                        this.currentDragTarget = event.target;
                         event.target.classList.add('dragging');
                         this.showGridOverlay();
+
+                        // 设置鼠标捕获，确保鼠标事件不会丢失
+                        if (event.target.setCapture) {
+                            event.target.setCapture();
+                        }
+
+                        // 优化拖拽性能
+                        event.target.style.willChange = 'transform';
+                        event.target.style.pointerEvents = 'none';
+
+                        // 防止文本选择和其他默认行为
+                        document.body.classList.add('dragging');
+                        document.body.style.userSelect = 'none';
+                        document.body.style.webkitUserSelect = 'none';
+
+                        WindowManager.log(`开始拖拽窗口: ${window.id}`);
                     },
                     move: (event) => {
                         const target = event.target;
                         const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
                         const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
 
+                        // 直接更新DOM，不使用节流以提高响应性
                         target.style.transform = `translate(${x}px, ${y}px)`;
                         target.setAttribute('data-x', x);
                         target.setAttribute('data-y', y);
+
+                        // 防止默认行为
+                        event.preventDefault();
                     },
                     end: (event) => {
+                        this.isOperating = false;
+                        this.currentDragTarget = null;
                         event.target.classList.remove('dragging');
                         this.hideGridOverlay();
-                        this.snapWindowToGrid(event.target, window);
+
+                        // 释放鼠标捕获
+                        if (document.releaseCapture) {
+                            document.releaseCapture();
+                        }
+
+                        // 恢复文本选择
+                        document.body.classList.remove('dragging');
+                        document.body.style.userSelect = '';
+                        document.body.style.webkitUserSelect = '';
+
+                        // 清理性能优化设置
+                        event.target.style.willChange = '';
+                        event.target.style.pointerEvents = '';
+
+                        // 确保状态完全清理后再进行吸附
+                        setTimeout(() => {
+                            this.snapWindowToGrid(event.target, window);
+                        }, 0);
+
+                        WindowManager.log(`结束拖拽窗口: ${window.id}`);
                     }
                 }
             })
             .resizable({
                 edges: { left: true, right: true, bottom: true, top: true },
+                // 关键配置：确保调整大小时鼠标跟随（与拖拽保持一致）
+                inertia: false,
+                autoScroll: true,
+                preserveAspectRatio: false,
                 listeners: {
                     start: (event) => {
+                        this.isOperating = true;
+                        this.isResizing = true;
+                        this.currentDragTarget = event.target;
+                        event.target.classList.add('resizing');
                         this.showGridOverlay();
+
+                        // 设置鼠标捕获，确保调整大小时鼠标事件不会丢失
+                        if (event.target.setCapture) {
+                            event.target.setCapture();
+                        }
+
+                        // 防止文本选择
+                        document.body.classList.add('resizing');
+                        document.body.style.userSelect = 'none';
+                        document.body.style.webkitUserSelect = 'none';
+
+                        WindowManager.log(`开始调整窗口大小: ${window.id}`);
                     },
                     move: (event) => {
                         const target = event.target;
                         let x = (parseFloat(target.getAttribute('data-x')) || 0);
                         let y = (parseFloat(target.getAttribute('data-y')) || 0);
 
+                        // 直接更新DOM，不使用节流以提高响应性
                         target.style.width = event.rect.width + 'px';
                         target.style.height = event.rect.height + 'px';
 
@@ -797,10 +1023,33 @@ class WindowManager {
                         target.style.transform = `translate(${x}px, ${y}px)`;
                         target.setAttribute('data-x', x);
                         target.setAttribute('data-y', y);
+
+                        // 防止默认行为
+                        event.preventDefault();
                     },
                     end: (event) => {
+                        this.isOperating = false;
+                        this.isResizing = false;
+                        this.currentDragTarget = null;
+                        event.target.classList.remove('resizing');
                         this.hideGridOverlay();
-                        this.snapWindowToGrid(event.target, window);
+
+                        // 释放鼠标捕获
+                        if (document.releaseCapture) {
+                            document.releaseCapture();
+                        }
+
+                        // 恢复文本选择
+                        document.body.classList.remove('resizing');
+                        document.body.style.userSelect = '';
+                        document.body.style.webkitUserSelect = '';
+
+                        // 确保状态完全清理后再进行吸附
+                        setTimeout(() => {
+                            this.snapWindowToGrid(event.target, window);
+                        }, 0);
+
+                        WindowManager.log(`结束调整窗口大小: ${window.id}`);
                     }
                 }
             });
@@ -813,14 +1062,15 @@ class WindowManager {
         const rect = element.getBoundingClientRect();
         const canvasRect = document.getElementById('canvasContainer').getBoundingClientRect();
 
-        // 计算相对于画布的位置
-        const relativeX = rect.left - canvasRect.left;
-        const relativeY = rect.top - canvasRect.top;
+        // 计算相对于画布的位置（考虑间距）
+        const gap = this.canvasConfig.windowGap;
+        const relativeX = rect.left - canvasRect.left - gap / 2;
+        const relativeY = rect.top - canvasRect.top - gap / 2;
 
         // 转换为网格坐标
         const gridPos = this.pixelToGrid(relativeX, relativeY);
-        const gridWidth = Math.round(rect.width / this.canvasConfig.cellWidth);
-        const gridHeight = Math.round(rect.height / this.canvasConfig.cellHeight);
+        const gridWidth = Math.round((rect.width + gap) / this.canvasConfig.cellWidth);
+        const gridHeight = Math.round((rect.height + gap) / this.canvasConfig.cellHeight);
 
         // 确保在边界内
         const clampedX = Math.max(0, Math.min(gridPos.x, this.canvasConfig.gridCols - gridWidth));
@@ -828,8 +1078,8 @@ class WindowManager {
         const clampedWidth = Math.max(1, Math.min(gridWidth, this.canvasConfig.gridCols - clampedX));
         const clampedHeight = Math.max(1, Math.min(gridHeight, this.canvasConfig.gridRows - clampedY));
 
-        // 检查碰撞并找到最近的有效位置
-        const validPos = this.findNearestValidPosition(clampedX, clampedY, clampedWidth, clampedHeight, window.id);
+        // 检查当前位置是否可用（排除自己）
+        const validPos = this.findValidPositionForResize(clampedX, clampedY, clampedWidth, clampedHeight, window.id);
 
         // 更新窗口数据
         this.updateWindow(window.id, {
@@ -842,13 +1092,68 @@ class WindowManager {
         // 重新定位窗口元素
         this.positionWindow(element, { ...window, x: validPos.x, y: validPos.y, width: clampedWidth, height: clampedHeight });
 
-        // 清除transform
+        // 完全清除操作状态
+        this.clearOperationState(element);
+
+        // 保存配置
+        this.saveConfig();
+
+        WindowManager.log(`窗口已吸附到网格: ${window.id} -> (${validPos.x}, ${validPos.y})`);
+    }
+
+    /**
+     * 清除操作状态
+     */
+    clearOperationState(element) {
+        // 清除transform和数据属性
         element.style.transform = '';
         element.removeAttribute('data-x');
         element.removeAttribute('data-y');
 
-        // 保存配置
-        this.saveConfig();
+        // 移除所有操作相关的CSS类
+        element.classList.remove('dragging', 'resizing', 'active');
+
+        // 重置所有操作状态
+        this.isOperating = false;
+        this.isResizing = false;
+
+        WindowManager.log(`操作状态已清除: ${element.id}`);
+    }
+
+    /**
+     * 清理资源，防止内存泄漏
+     */
+    cleanup() {
+        // 移除全局事件监听器
+        if (this.globalMouseUpHandler) {
+            document.removeEventListener('mouseup', this.globalMouseUpHandler, true);
+            this.globalMouseUpHandler = null;
+        }
+
+        if (this.globalMouseMoveHandler) {
+            document.removeEventListener('mousemove', this.globalMouseMoveHandler, true);
+            this.globalMouseMoveHandler = null;
+        }
+
+        // 移除所有interact.js实例
+        this.windows.forEach(window => {
+            const element = document.getElementById(window.id);
+            if (element) {
+                interact(element).unset();
+            }
+        });
+
+        // 重置所有状态
+        this.isOperating = false;
+        this.isResizing = false;
+        this.currentDragTarget = null;
+
+        // 恢复文本选择和body类名
+        document.body.classList.remove('dragging', 'resizing');
+        document.body.style.userSelect = '';
+        document.body.style.webkitUserSelect = '';
+
+        WindowManager.log('资源清理完成');
     }
 
     /**
@@ -1052,8 +1357,6 @@ class WindowManager {
         `;
     }
 
-
-
     /**
      * 清空所有窗口
      */
@@ -1068,8 +1371,6 @@ class WindowManager {
             this.showStatusMessage('所有窗口已清空', 'success');
         }
     }
-
-
 
     /**
      * 加载可用标签页
@@ -1298,8 +1599,6 @@ class WindowManager {
 
         console.log(`🎯 已选择标签页: ${tabId}`);
     }
-
-
 
     /**
      * 处理键盘快捷键
